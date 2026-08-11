@@ -86,11 +86,12 @@ scripts/make-app.sh
 cp -R dist/TrueMem.app /Applications/
 ```
 
-バージョン・ビルド番号・Universalビルドはスクリプトを編集せず指定できる:
+バージョンはリポジトリ直下の `VERSION` ファイルを唯一の出所とし、リリースビルドと手元ビルドで食い違わないようにしている。上書きしたい場合や Universal ビルドは環境変数で指定できる:
 
 ```sh
-APP_VERSION=0.4.0 APP_BUILD=42 scripts/make-app.sh   # 自アーキテクチャのみ(高速)
+scripts/make-app.sh                                   # VERSION の値・自アーキテクチャのみ(高速)
 UNIVERSAL=1 scripts/make-app.sh                       # arm64 + x86_64(配布用)
+APP_VERSION=0.9.9 APP_BUILD=42 scripts/make-app.sh    # 明示指定
 ```
 
 生成物はad-hoc署名で、同じMacでのローカル利用を想定している。第三者へ外部配布する場合は、Developer ID Application証明書での署名とAppleのnotarizationを別途行うこと。

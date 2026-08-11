@@ -25,6 +25,8 @@ jobs:
           # 更新判定はこのコミットSHAで行う
           APP_COMMIT: ${{ github.sha }}
           UNIVERSAL: "1"
+          # APP_VERSION は VERSION ファイルから取る。ビルド番号は実行回数を使う
+          APP_BUILD: ${{ github.run_number }}
         run: scripts/make-app.sh
 
       - name: Universal になっていることを確認
