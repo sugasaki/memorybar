@@ -17,12 +17,22 @@ enum UpdateState: Sendable, Equatable {
         case .installing: "インストール中…"
         case .upToDate: "最新版です"
         case .available: "新しいバージョンがあります"
-        case .failed(let reason): reason
+        case .failed: "確認できませんでした"
         }
     }
 
     /// 実行中は操作を受け付けない
     var isBusy: Bool { self == .checking || self == .installing }
+
+    var availableRelease: Updater.ReleaseInfo? {
+        if case .available(let release) = self { return release }
+        return nil
+    }
+
+    var failureDetail: String? {
+        if case .failed(let detail) = self { return detail }
+        return nil
+    }
 }
 
 @Observable
@@ -53,74 +63,45 @@ final class UpdateController {
         }
     }
 
-    /// 起動時の自動確認。無効化されている場合と、更新が無い場合は何も表示しない
+    /// 起動時の自動確認。**確認するだけで、インストールはしない**
     func checkAtLaunchIfEnabled() {
         guard !hasCheckedAtLaunch else { return }
         hasCheckedAtLaunch = true
         guard automaticChecksEnabled else { return }
-        check(userInitiated: false)
+        check()
     }
 
-    func check(userInitiated: Bool) {
+    /// 更新の有無を調べて状態に反映する。
+    /// 結果はメニューパネルに表示し、モーダルダイアログは使わない。
+    /// メニューバー常駐アプリでは `NSAlert.runModal()` が操作を待たずに戻ることがあり、
+    /// 同意の確認手段として信頼できないため（Issue #22）
+    func check() {
         guard !state.isBusy else { return }
         state = .checking
         Task {
             switch await Self.fetchLatest() {
             case .success(let release):
-                if Updater.isUpdateAvailable(release) {
-                    state = .available(release)
-                    promptToInstall(release)
-                } else {
-                    state = .upToDate
-                    if userInitiated {
-                        Self.showInfo(
-                            title: "最新版です",
-                            message: "現在のバージョン (\(Self.currentVersionLabel)) が最新です。")
-                    }
-                }
+                state = Updater.isUpdateAvailable(release) ? .available(release) : .upToDate
             case .failure(let error):
-                state = .failed(error.errorDescription ?? "更新を確認できませんでした")
-                // 自動確認の失敗でダイアログを出すと、gh 未導入の環境で毎回邪魔になる
-                if userInitiated {
-                    Self.showError(title: "更新を確認できませんでした", message: Self.detail(of: error))
-                }
+                state = .failed(Self.detail(of: error))
+            }
+        }
+    }
+
+    /// 実際のインストール。**パネル上のボタンが押されたときにのみ呼ぶ**（この操作が同意そのもの）
+    func installAvailableUpdate() {
+        guard let release = state.availableRelease else { return }
+        state = .installing
+        Task {
+            // 成功するとプロセスが終了するため、戻ってくるのは失敗したときだけ
+            if let error = await Self.performInstall(release) {
+                state = .failed(Self.detail(of: error))
             }
         }
     }
 
     func openReleasePage() {
         NSWorkspace.shared.open(Updater.releaseURL)
-    }
-
-    private func promptToInstall(_ release: Updater.ReleaseInfo) {
-        let alert = NSAlert()
-        alert.messageText = "新しいバージョンがあります"
-        alert.informativeText = """
-            現在: \(Self.currentVersionLabel)
-            最新: \(Updater.shortCommit(release.commit))
-
-            ダウンロードしてインストールしますか?
-            インストール後、TrueMem は自動的に再起動します。
-            """
-        alert.addButton(withTitle: "インストール")
-        alert.addButton(withTitle: "後で")
-        NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            state = .idle
-            return
-        }
-        install(release)
-    }
-
-    private func install(_ release: Updater.ReleaseInfo) {
-        state = .installing
-        Task {
-            // 成功するとプロセスが終了するため、戻ってくるのは失敗したときだけ
-            if let error = await Self.performInstall(release) {
-                state = .failed(error.errorDescription ?? "インストールに失敗しました")
-                Self.showError(title: "インストールに失敗しました", message: Self.detail(of: error))
-            }
-        }
     }
 
     /// gh の実行とダウンロードはブロッキングなので、メインスレッドを止めないよう別スレッドで行う
@@ -153,7 +134,7 @@ final class UpdateController {
     private static func detail(of error: Updater.UpdateError) -> String {
         [error.errorDescription, error.recoverySuggestion]
             .compactMap { $0 }
-            .joined(separator: "\n\n")
+            .joined(separator: " ")
     }
 
     /// Bundle の読み取りのみで状態を持たないため、CLI(非 MainActor)からも参照できる
@@ -161,23 +142,5 @@ final class UpdateController {
         let version =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         return "\(version) (\(Updater.shortCommit(Updater.currentCommit)))"
-    }
-
-    private static func showInfo(title: String, message: String) {
-        showAlert(title: title, message: message, style: .informational)
-    }
-
-    private static func showError(title: String, message: String) {
-        showAlert(title: title, message: message, style: .warning)
-    }
-
-    private static func showAlert(title: String, message: String, style: NSAlert.Style) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.alertStyle = style
-        alert.addButton(withTitle: "OK")
-        NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
     }
 }

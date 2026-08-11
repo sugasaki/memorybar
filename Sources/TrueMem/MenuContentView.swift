@@ -76,7 +76,7 @@ struct MenuContentView: View {
     private var updates: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Button("更新を確認") { updateController.check(userInitiated: true) }
+                Button("更新を確認") { updateController.check() }
                     .font(.callout)
                     .disabled(updateController.state.isBusy)
                 Button("リリースページ") { updateController.openReleasePage() }
@@ -86,6 +86,26 @@ struct MenuContentView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+            // インストールはこのボタンを押したときにだけ実行する(この操作が同意そのもの)
+            if let release = updateController.state.availableRelease {
+                HStack {
+                    Text("最新: \(Updater.shortCommit(release.commit))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("インストールして再起動") {
+                        updateController.installAvailableUpdate()
+                    }
+                    .font(.callout)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            if let detail = updateController.state.failureDetail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Toggle("起動時に自動で確認", isOn: updateAutomaticallyBinding)
                 .font(.callout)

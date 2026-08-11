@@ -27,7 +27,34 @@ enum Main {
             printUpdateStatus()
             return
         }
+        // 検証用: 更新があれば実際にインストールする。
+        // GUI ではパネルのボタン操作が同意にあたるが、ここでは実行自体が同意にあたる
+        if CommandLine.arguments.contains("--install-update") {
+            installUpdateFromCLI()
+            return
+        }
         TrueMemApp.main()
+    }
+
+    private static func installUpdateFromCLI() {
+        do {
+            let release = try Updater.fetchLatestRelease()
+            guard Updater.isUpdateAvailable(release) else {
+                print("更新はありません(現在: \(UpdateController.currentVersionLabel))")
+                return
+            }
+            print("インストールします: \(Updater.shortCommit(release.commit))")
+            // 成功するとプロセスが終了するため、以降は実行されない
+            try Updater.downloadAndInstall(release)
+        } catch let error as Updater.UpdateError {
+            let detail = [error.errorDescription, error.recoverySuggestion]
+                .compactMap { $0 }.joined(separator: " / ")
+            FileHandle.standardError.write(Data("\(detail)\n".utf8))
+            exit(1)
+        } catch {
+            FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
     }
 
     private static func printUpdateStatus() {

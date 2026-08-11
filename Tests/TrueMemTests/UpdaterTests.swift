@@ -89,6 +89,42 @@ final class UpdaterTests: XCTestCase {
         XCTAssertFalse(Updater.ghFailureRecovery("").isEmpty)
     }
 
+    @MainActor
+    func test更新が見つかってもインストールは自動で始まらない() {
+        // 起動時の自動確認で勝手にインストールされないこと(Issue #22 の回帰防止)。
+        // 同意はパネルのボタン操作のみで、状態は .available に留まる
+        let controller = UpdateController()
+        XCTAssertEqual(controller.state, .idle)
+        XCTAssertNil(controller.state.availableRelease)
+
+        let state = UpdateState.available(release(commit: "abcdef0123456"))
+        XCTAssertNotNil(state.availableRelease)
+        XCTAssertFalse(state.isBusy)
+        XCTAssertEqual(state.message, "新しいバージョンがあります")
+    }
+
+    @MainActor
+    func test更新が無い状態でインストールを呼んでも何も起きない() {
+        let controller = UpdateController()
+        controller.installAvailableUpdate()
+        // .installing に遷移しない(インストール対象が無いため)
+        XCTAssertEqual(controller.state, .idle)
+    }
+
+    func test失敗状態は詳細を保持し実行中とみなさない() {
+        let state = UpdateState.failed("gh が見つかりません")
+        XCTAssertEqual(state.failureDetail, "gh が見つかりません")
+        XCTAssertFalse(state.isBusy)
+        XCTAssertNil(state.availableRelease)
+    }
+
+    func test実行中の状態は操作を受け付けない() {
+        XCTAssertTrue(UpdateState.checking.isBusy)
+        XCTAssertTrue(UpdateState.installing.isBusy)
+        XCTAssertFalse(UpdateState.idle.isBusy)
+        XCTAssertFalse(UpdateState.upToDate.isBusy)
+    }
+
     func testダウンロードURLはリポジトリと一致する() {
         XCTAssertEqual(Updater.repository, "sugasaki/truemem")
         XCTAssertEqual(Updater.assetName, "TrueMem.zip")
