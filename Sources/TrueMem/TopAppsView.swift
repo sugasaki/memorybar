@@ -1,6 +1,24 @@
 import AppKit
 import SwiftUI
 
+/// アプリアイコンの取得結果を保持する。
+/// `NSRunningApplication(processIdentifier:)` は実測で5行あたり約1.5msかかり、
+/// 表示中は毎秒再評価されるため、ほぼ変わらないアイコンを引き直さないようにする
+@MainActor
+enum AppIconCache {
+    private static var cache: [pid_t: NSImage] = [:]
+    /// 起動・終了を繰り返すと際限なく増えるため、頃合いで捨てる
+    private static let capacity = 64
+
+    static func icon(for pid: pid_t) -> NSImage? {
+        if let cached = cache[pid] { return cached }
+        guard let image = NSRunningApplication(processIdentifier: pid)?.icon else { return nil }
+        if cache.count >= capacity { cache.removeAll(keepingCapacity: true) }
+        cache[pid] = image
+        return image
+    }
+}
+
 /// 使用量の多いアプリの一覧。メニューパネルとフローティングウィンドウで共用する
 struct TopAppsView: View {
     let apps: [AppMemoryUsage]
@@ -11,17 +29,21 @@ struct TopAppsView: View {
                 Text("使用量の多いアプリ")
                     .font(.callout.weight(.medium))
                 Spacer(minLength: 0)
-                // 合計が物理メモリを超えることがあるため、その理由を常に添える
                 Image(systemName: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .help(
                         """
                         アクティビティモニタの「メモリ」列と同じ指標(phys_footprint)の合計です。
-                        圧縮・スワップ済みの分を含むため、合計が物理メモリを超えることがあります。
-                        他ユーザーやシステム所有のプロセスは取得できないため含まれません。
+                        ヘルパープロセスは親アプリにまとめています。
+                        他ユーザー所有のプロセスは権限の都合で取得できないため含まれません。
                         """)
             }
+            // 合計が物理メモリを超えるのは驚かれる点なので、ホバーではなく常に見える形で示す
+            Text("圧縮・スワップ済みを含むため、合計は物理メモリを超えることがあります")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
             ForEach(apps) { app in
                 row(app)
             }
@@ -48,7 +70,7 @@ struct TopAppsView: View {
     @ViewBuilder
     private func icon(for app: AppMemoryUsage) -> some View {
         // アイコンは描画時に引く。Sendable な集計結果に NSImage を持たせないため
-        if let pid = app.pid, let image = NSRunningApplication(processIdentifier: pid)?.icon {
+        if let pid = app.pid, let image = AppIconCache.icon(for: pid) {
             Image(nsImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
