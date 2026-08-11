@@ -49,6 +49,27 @@ final class FloatingWindowTests: XCTestCase {
         }
     }
 
+    func test最小サイズは既定サイズより小さく要約が収まる大きさである() {
+        let min = FloatingWindowController.minimumSize
+        let def = FloatingWindowController.defaultSize
+        XCTAssertLessThan(min.width, def.width)
+        XCTAssertLessThan(min.height, def.height)
+        // 要約(見出し+残容量+帯)が収まらない大きさまで縮められると読めなくなる
+        XCTAssertGreaterThanOrEqual(min.height, 110)
+        XCTAssertGreaterThanOrEqual(min.width, 200)
+    }
+
+    func test内訳の合計は物理メモリと一致する() {
+        // 帯が物理メモリを過不足なく覆っていること(隙間や超過があると構成比が嘘になる)
+        let snapshot = MemorySnapshot(
+            totalBytes: 1_572_864 * 16384, pageSize: 16384,
+            internalPages: 500_000, purgeablePages: 20_000, wiredPages: 100_000,
+            compressedPages: 80_000, externalPages: 150_000, freePages: 30_000,
+            speculativePages: 5_000, swapUsedBytes: 0, pressure: .normal)
+        let total = MemoryComposition.segments(of: snapshot).reduce(UInt64(0)) { $0 + $1.bytes }
+        XCTAssertEqual(total, snapshot.total)
+    }
+
     func testオンオフを繰り返しても状態が壊れない() {
         let controller = FloatingWindowController(monitor: MemoryMonitor())
         for _ in 0..<3 {
