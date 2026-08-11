@@ -9,20 +9,31 @@ struct FloatingContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let snapshot = monitor.snapshot {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(MemoryFormat.detail(snapshot.available))
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                    Text("空き")
+                HStack(spacing: 6) {
+                    Image(systemName: "memorychip")
                         .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("TrueMem")
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Circle()
                         .fill(pressureColor(snapshot.pressure))
-                        .frame(width: 8, height: 8)
+                        .frame(width: 9, height: 9)
                     Text(snapshot.pressure.label)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(MemoryFormat.detail(snapshot.available))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text("空き")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
                 }
                 // ProgressView は非アクティブウィンドウで tint が退色し灰色に見えるため、
                 // フローティング側では自前で描く(このウインドウは key にならない)
@@ -33,7 +44,7 @@ struct FloatingContentView: View {
                     Text("\(Int((snapshot.usedFraction * 100).rounded()))%")
                         .monospacedDigit()
                 }
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             } else {
                 Text("計測に失敗しました")
@@ -41,10 +52,14 @@ struct FloatingContentView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(12)
-        .frame(width: 200)
+        .padding(14)
+        .frame(width: 260)
         // 背景のどこを掴んでも動かせるようにするため、内容側でクリックを奪わない
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        // 背景と同化して見失わないよう、輪郭を明示する
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(.separator, lineWidth: 1))
     }
 
     private func usageBar(_ snapshot: MemorySnapshot) -> some View {
@@ -56,7 +71,7 @@ struct FloatingContentView: View {
                     .frame(width: geometry.size.width * snapshot.usedFraction)
             }
         }
-        .frame(height: 6)
+        .frame(height: 8)
     }
 
     private func usageBarTint(_ pressure: MemoryPressure) -> Color {
@@ -78,8 +93,9 @@ struct FloatingContentView: View {
 /// (`.accessory` なアプリでも前面に出し、全スペースへ追従させたいため)
 @MainActor
 final class FloatingWindowController {
-    static let defaultsKey = "floatingWindowVisible"
-    private static let frameAutosaveName = "TrueMemFloatingWindow"
+    // テストや CLI から非 MainActor でも読めるようにする(値を持つだけで状態はない)
+    nonisolated static let defaultsKey = "floatingWindowVisible"
+    nonisolated static let frameAutosaveName = "TrueMemFloatingWindow"
 
     private var panel: NSPanel?
     private let monitor: MemoryMonitor
@@ -137,16 +153,33 @@ final class FloatingWindowController {
         panel.contentView = NSHostingView(rootView: FloatingContentView(monitor: monitor))
         panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 200, height: 96))
 
-        // 位置を記憶する。初回は右上寄りに置く
         panel.setFrameAutosaveName(Self.frameAutosaveName)
-        if panel.frame.origin == .zero, let screen = NSScreen.main {
-            let visible = screen.visibleFrame
-            panel.setFrameOrigin(
-                NSPoint(
-                    x: visible.maxX - panel.frame.width - 24,
-                    y: visible.maxY - panel.frame.height - 24))
+        // 記憶した位置がどの画面にも無い場合(表示構成の変更など)は見失うため、既定位置へ戻す
+        if panel.frame.origin == .zero || !Self.isOnAnyScreen(panel.frame) {
+            Self.moveToDefaultPosition(panel)
         }
         panel.orderFrontRegardless()
         self.panel = panel
+    }
+
+    /// 見失ったときに呼び出して、主画面の右上へ引き戻す
+    func resetPosition() {
+        guard let panel else { return }
+        Self.moveToDefaultPosition(panel)
+        panel.orderFrontRegardless()
+    }
+
+    /// ウィンドウの一部でも可視領域に重なっているか。完全に画面外なら操作できない
+    nonisolated static func isOnAnyScreen(_ frame: NSRect) -> Bool {
+        NSScreen.screens.contains { $0.visibleFrame.intersects(frame) }
+    }
+
+    private static func moveToDefaultPosition(_ panel: NSPanel) {
+        guard let screen = NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        panel.setFrameOrigin(
+            NSPoint(
+                x: visible.maxX - panel.frame.width - 24,
+                y: visible.maxY - panel.frame.height - 24))
     }
 }

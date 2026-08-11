@@ -82,12 +82,19 @@ struct MenuContentView: View {
     }
 
     private var floating: some View {
-        Toggle("フローティング表示", isOn: $floatingVisible)
-            .font(.callout)
-            .toggleStyle(.checkbox)
-            // パネルを開くたびに実際の状態へ合わせる
-            .onAppear { floatingVisible = floatingController.isVisible }
-            .onChange(of: floatingVisible) { floatingController.isVisible = floatingVisible }
+        HStack {
+            Toggle("フローティング表示", isOn: $floatingVisible)
+                .font(.callout)
+                .toggleStyle(.checkbox)
+                // パネルを開くたびに実際の状態へ合わせる
+                .onAppear { floatingVisible = floatingController.isVisible }
+                .onChange(of: floatingVisible) { floatingController.isVisible = floatingVisible }
+            Spacer()
+            // 見失ったときの復帰手段
+            Button("位置を戻す") { floatingController.resetPosition() }
+                .font(.callout)
+                .disabled(!floatingVisible)
+        }
     }
 
     private var updates: some View {
