@@ -12,7 +12,19 @@ EXECUTABLE="truemem"
 APP_VERSION="${APP_VERSION:-$(cat VERSION 2>/dev/null || echo 0.0.0)}"
 APP_BUILD="${APP_BUILD:-1}"
 # 更新判定に使うソースコミット。CIでは GITHUB_SHA、ローカルでは git から取る
-APP_COMMIT="${APP_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+# 未コミットの変更を含むビルドに HEAD をそのまま刻むと、実際には別物なのに
+# 「そのコミットのリリース版」を名乗ってしまう(更新判定にも使われる)。
+# dirty なら SHA として不正な値にして、更新判定から外す
+default_commit() {
+    local sha
+    sha="$(git rev-parse HEAD 2>/dev/null)" || { echo unknown; return; }
+    if git diff --quiet HEAD 2>/dev/null; then
+        echo "$sha"
+    else
+        echo "${sha}-dirty"
+    fi
+}
+APP_COMMIT="${APP_COMMIT:-$(default_commit)}"
 # ローカルは自アーキテクチャのみ、配布用は UNIVERSAL=1 で arm64 + x86_64
 UNIVERSAL="${UNIVERSAL:-0}"
 
