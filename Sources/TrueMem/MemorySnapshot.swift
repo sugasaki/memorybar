@@ -56,15 +56,31 @@ struct MemorySnapshot: Sendable, Equatable {
     let compressed: UInt64
     /// キャッシュされたファイル = (external + purgeable) × ページサイズ
     let cachedFiles: UInt64
+    /// どのプロセスにも割り当てられていないページ(vm_statの「free」)
+    let unused: UInt64
     /// 使用済みスワップ(バイト)。取得失敗時はnil(0と区別する)
     let swapUsed: UInt64?
     let pressure: MemoryPressure
 
-    /// アクティビティモニタの「使用済みメモリ」
-    var used: UInt64 { appMemory + wired + compressed }
-    /// 残容量(物理メモリ − 使用済み)。キャッシュは解放可能なので残容量に含まれる。
+    /// 残容量。いま解放されている領域と、解放できるファイルキャッシュの合計。
+    /// これを一次的な定義とし、使用済みをここから導出することで両者が必ず整合する。
     /// vm_statの「free pages」との混同を避けるためfreeではなくavailableと呼ぶ
-    var available: UInt64 { total > used ? total - used : 0 }
+    var available: UInt64 { min(total, unused + cachedFiles) }
+
+    /// アクティビティモニタの「使用済みメモリ」。
+    ///
+    /// アプリ+確保済み+圧縮の合計**ではない**点に注意。実測では約0.7GB大きく、
+    /// その差はVMがどのカテゴリにも計上していないページ(カーネル/ファームウェア予約や
+    /// 圧縮機構のオーバーヘッド)にあたる。同時採取での照合は Issue #24 を参照
+    var used: UInt64 { total - available }
+
+    /// 使用済みのうち、アプリ・確保済み・圧縮のどれにも計上されない分。
+    /// これを示さないと画面上で内訳の合計が使用済みと合わず、誤りに見える
+    var other: UInt64 {
+        let categorized = appMemory + wired + compressed
+        return used > categorized ? used - categorized : 0
+    }
+
     /// 使用率(0.0〜1.0)
     var usedFraction: Double {
         guard total > 0 else { return 0 }
@@ -79,6 +95,7 @@ struct MemorySnapshot: Sendable, Equatable {
         wiredPages: UInt64,
         compressedPages: UInt64,
         externalPages: UInt64,
+        freePages: UInt64,
         swapUsedBytes: UInt64?,
         pressure: MemoryPressure
     ) {
@@ -89,6 +106,7 @@ struct MemorySnapshot: Sendable, Equatable {
         self.wired = wiredPages * pageSize
         self.compressed = compressedPages * pageSize
         self.cachedFiles = (externalPages + purgeablePages) * pageSize
+        self.unused = freePages * pageSize
         self.swapUsed = swapUsedBytes
         self.pressure = pressure
     }

@@ -4,13 +4,15 @@ import XCTest
 
 final class DisplayModeTests: XCTestCase {
     private func makeSnapshot(usedBytes: UInt64, totalBytes: UInt64) -> MemorySnapshot {
-        // wired だけで使用済みを構成した単純なスナップショット(pageSize=1 でバイト直指定)
+        // pageSize=1 でバイト直指定。使用済みは残容量から導出されるため、
+        // 目的の使用済みになるよう未使用ページ数を逆算する
         MemorySnapshot(
             totalBytes: totalBytes,
             pageSize: 1,
             internalPages: 0, purgeablePages: 0,
             wiredPages: usedBytes,
             compressedPages: 0, externalPages: 0,
+            freePages: totalBytes - usedBytes,
             swapUsedBytes: 0, pressure: .normal)
     }
 
