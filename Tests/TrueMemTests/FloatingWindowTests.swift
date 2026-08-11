@@ -49,6 +49,17 @@ final class FloatingWindowTests: XCTestCase {
         }
     }
 
+    func test閉じたあと再起動しても復活しない() {
+        // 閉じる操作は isVisible を false にする。単にウィンドウを隠すだけだと
+        // 次回起動時に勝手に出てきてしまう(Issue #37)
+        let controller = FloatingWindowController(monitor: MemoryMonitor())
+        controller.isVisible = true
+        controller.isVisible = false  // 閉じるボタン相当
+
+        let afterRelaunch = FloatingWindowController(monitor: MemoryMonitor())
+        XCTAssertFalse(afterRelaunch.isVisible)
+    }
+
     func test最小サイズは既定サイズより小さく要約が収まる大きさである() {
         let min = FloatingWindowController.minimumSize
         let def = FloatingWindowController.defaultSize
