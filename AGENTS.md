@@ -23,7 +23,7 @@ TrueMem — macOS のメニューバーに常駐し、メモリの残量・使�
 swift build            # デバッグビルド
 swift test             # テスト実行
 swift run              # そのまま実行（メニューバーに常駐）
-scripts/make-app.sh    # 配布用 .app バンドルを dist/ に生成
+scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に生成
 ```
 
 ## ファイル構成
@@ -34,6 +34,7 @@ scripts/make-app.sh    # 配布用 .app バンドルを dist/ に生成
   - `MemorySnapshot.swift` — 計測値から使用量・残量を導出する純粋ロジック
   - `DisplayMode.swift` — メニューバー表示モードとフォーマット
   - `MenuContentView.swift` — クリック時の詳細パネル
+- `Sources/CMachSupport/` — Swift へ import できない Mach 定数を公開する最小 C shim
 - `Tests/TrueMemTests/` — ユニットテスト（純粋ロジック + 実機サンプリング・Mach ポートリーク回帰）
 - `scripts/make-app.sh` — .app バンドル生成スクリプト
 
@@ -42,6 +43,7 @@ scripts/make-app.sh    # 配布用 .app バンドルを dist/ に生成
 - **値の正確性が最優先**: 表示値の計算式を変更する場合は、アクティビティモニタの表示と突き合わせて検証する（`swift run truemem --print` で1回分のサンプルを標準出力に出せる）
 - ページサイズは `host_page_size` で取得する（Apple Silicon は 16KB。4096 をハードコードしない）
 - **Mach ポート規律**: `mach_host_self()` 等で得た送信権は、同一スコープの `defer` で必ず `mach_port_deallocate` する。常駐アプリのためリークは蓄積する（回帰テスト `MemorySamplerTests` が参照数の増加を検出する）
+- メモリプレッシャーの状態遷移は公開 API の `DispatchSource` を中心にし、非公開 sysctl を使う場合は小さな互換レイヤーへ隔離して失敗を `.unknown` として扱う
 - 外部ライブラリを追加しない（追加が必要と考える場合は利用者に確認）
 
 ## 開発規約
@@ -69,6 +71,16 @@ scripts/make-app.sh    # 配布用 .app バンドルを dist/ に生成
     ```sh
     cp /path/to/main-repo/.env.local /path/to/worktree/.env.local
     ```
+
+#### スタック PR とベースブランチ削除
+- スタック PR には依存先 PR とマージ順を本文へ明記する
+- PR をマージしてブランチを削除する前に、そのブランチを base とする未完了 PR を必ず確認する:
+  ```sh
+  gh pr list --state open --base <削除予定ブランチ>
+  ```
+- 依存 PR がある場合は、元の base ブランチを削除する前に `gh pr edit <PR番号> --base main` などで retarget する
+- retarget 後は `gh pr diff <PR番号>` で意図しない差分がないことを確認し、CI を再実行・再確認してから元ブランチを削除する
+- base ブランチの削除を先に行うと依存 PR が自動クローズされ、レビューと CI の履歴が分断されるため順序を逆にしない
 
 ### コミットメッセージ
 - 日本語で記述
@@ -124,13 +136,33 @@ scripts/make-app.sh    # 配布用 .app バンドルを dist/ に生成
 - `gh pr checks` の終了コード: 0=全pass / 8=保留(実行中) / それ以外=失敗
 - **`|| true` を付けて失敗を握り潰さない**。終了コードを退避して分岐し、保留(8)はポーリングで待つ:
   ```sh
-  for i in 1 2 3 4 5 6; do
+  checks_passed=false
+  for attempt in 1 2 3 4 5 6; do
     gh pr checks <PR番号>; ec=$?
     case "$ec" in
-      0) break ;;                        # 全pass → 次へ進む
-      8) sleep 20 ;;                     # 実行中 → 20秒待って再確認
-      *) echo "失敗/認証エラー: exit=$ec"; exit "$ec" ;;  # 中断
+      0)
+        checks_passed=true
+        break
+        ;;
+      8)
+        if [ "$attempt" -eq 6 ]; then
+          echo "CIが待機上限まで pending でした" >&2
+          exit 8
+        fi
+        sleep 20
+        ;;
+      *)
+        echo "失敗/認証エラー: exit=$ec" >&2
+        exit "$ec"
+        ;;
     esac
   done
+  if [ "$checks_passed" != true ]; then
+    exit 8
+  fi
   ```
+
+### GitHub Actions の更新方針
+- GitHub 公式 Action は、Node.js ランタイムやセキュリティ修正を取り込むため、検証済みの最新メジャータグ（例: `actions/checkout@v6`）を使用する
+- メジャーバージョンを更新した PR では、非推奨警告が消え、既存の build / test / .app 検証がすべて成功することを CI ログで確認する
 

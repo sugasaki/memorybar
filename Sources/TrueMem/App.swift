@@ -1,10 +1,23 @@
 import AppKit
+import Dispatch
 import SwiftUI
+
+/// Swift 6.1では@MainActorクラスのdeinitが非分離のため、
+/// ライフサイクル資源を非Actorの専用ホルダーへまとめて確実に停止する。
+private final class MemoryMonitorResources: @unchecked Sendable {
+    var pressureSource: DispatchSourceMemoryPressure?
+    var timer: Timer?
+
+    deinit {
+        timer?.invalidate()
+        pressureSource?.cancel()
+    }
+}
 
 @main
 enum Main {
     static func main() {
-        // 検証用: --print で1サンプルを標準出力に出して終了する
+        // 検証用: --printで1サンプルを標準出力に出して終了する
         if CommandLine.arguments.contains("--print") {
             printSample()
             return
@@ -37,21 +50,50 @@ enum Main {
 @Observable
 @MainActor
 final class MemoryMonitor {
+    static let refreshInterval: TimeInterval = 2.0
+    static let timerTolerance: TimeInterval = 0.2
+
     private(set) var snapshot: MemorySnapshot?
-    private var timer: Timer?
+    private var currentPressure = MemorySampler.initialPressure()
+    private let resources = MemoryMonitorResources()
 
     init() {
+        startPressureMonitoring()
         refresh()
-        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+
+        let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refresh() }
         }
-        // メニュー表示中(イベントトラッキング中)も更新が止まらないよう common モードで回す
+        // OSが他の処理とまとめて起床できるよう、更新間隔の10%を許容する
+        timer.tolerance = Self.timerTolerance
+        // メニュー表示中(イベントトラッキング中)も更新が止まらないようcommonモードで回す
         RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        resources.timer = timer
     }
 
     func refresh() {
-        snapshot = MemorySampler.sample()
+        snapshot = MemorySampler.sample(pressure: currentPressure)
+    }
+
+    private func startPressureMonitoring() {
+        let source = DispatchSource.makeMemoryPressureSource(
+            eventMask: [.normal, .warning, .critical],
+            queue: .main)
+        resources.pressureSource = source
+        source.setEventHandler { [weak self] in
+            // dataはイベントハンドラ内で読み取る。非同期ホップ後に読むと次のイベントで
+            // 上書き・クリアされ、プレッシャーを取りこぼして.unknownと誤表示しうる
+            let event = source.data
+            Task { @MainActor [weak self] in
+                self?.apply(pressure: MemoryPressure(dispatchEvent: event))
+            }
+        }
+        source.resume()
+    }
+
+    private func apply(pressure: MemoryPressure) {
+        currentPressure = pressure
+        refresh()
     }
 }
 
@@ -80,7 +122,7 @@ struct TrueMemApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // swift run など .app バンドル外から起動しても Dock に出さない
+        // swift runなど.appバンドル外から起動してもDockに出さない
         NSApp.setActivationPolicy(.accessory)
     }
 }

@@ -1,9 +1,10 @@
+import CMachSupport
 import Darwin
 import XCTest
 
 @testable import TrueMem
 
-/// 実機サンプリングの検証(CI の macOS ランナーでも実行される)
+/// 実機サンプリングの検証(CIのmacOSランナーでも実行される)
 final class MemorySamplerTests: XCTestCase {
     func test実機でサンプリングでき妥当な値が取れる() throws {
         let snapshot = try XCTUnwrap(MemorySampler.sample())
@@ -33,7 +34,30 @@ final class MemorySamplerTests: XCTestCase {
             mach_port_get_refs(mach_task_self_, host, MACH_PORT_RIGHT_SEND, &refsAfter),
             KERN_SUCCESS)
 
-        // 修正前は mach_host_self() の解放漏れにより 200 サンプルで +400 になる
         XCTAssertEqual(refsAfter, refsBefore, "サンプリングでホストポートの送信権参照が増えている")
+    }
+
+    @MainActor
+    func test監視モデルは保持解除後に破棄される() {
+        weak var weakMonitor: MemoryMonitor?
+        autoreleasepool {
+            let monitor = MemoryMonitor()
+            weakMonitor = monitor
+        }
+        XCTAssertNil(weakMonitor)
+    }
+
+    @MainActor
+    func testタイマーの許容誤差は更新間隔の10パーセント() {
+        XCTAssertEqual(MemoryMonitor.refreshInterval, 2.0)
+        XCTAssertEqual(MemoryMonitor.timerTolerance, 0.2)
+    }
+
+    /// 公式マクロ経由の要素数が構造体サイズと乖離したら検出する
+    /// (乖離したまま host_statistics64 を呼ぶと取得値が壊れる)
+    func testHOST_VM_INFO64_COUNTは構造体サイズと整合する() {
+        let sizeBased = mach_msg_type_number_t(
+            MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
+        XCTAssertEqual(truemem_host_vm_info64_count(), sizeBased)
     }
 }

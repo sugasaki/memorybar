@@ -72,7 +72,7 @@ struct MenuContentView: View {
 
     private var footer: some View {
         HStack {
-            Text("2秒ごとに更新")
+            Text("約2秒ごとに更新")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
