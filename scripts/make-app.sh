@@ -15,10 +15,14 @@ APP_BUILD="${APP_BUILD:-1}"
 # 未コミットの変更を含むビルドに HEAD をそのまま刻むと、実際には別物なのに
 # 「そのコミットのリリース版」を名乗ってしまう(更新判定にも使われる)。
 # dirty なら SHA として不正な値にして、更新判定から外す
+# git diff ではなく git status を見るのは、未追跡ファイルを拾うため。
+# SwiftPM は Sources/ を glob するので、追加された未追跡の .swift は
+# ビルドに取り込まれるのに git diff では検出できない
 default_commit() {
-    local sha
+    local sha status
     sha="$(git rev-parse HEAD 2>/dev/null)" || { echo unknown; return; }
-    if git diff --quiet HEAD 2>/dev/null; then
+    status="$(git status --porcelain)" || { echo unknown; return; }
+    if [ -z "$status" ]; then
         echo "$sha"
     else
         echo "${sha}-dirty"
@@ -92,6 +96,9 @@ EOF
 codesign --force --sign - "$APP_DIR"
 
 echo ""
-echo "生成完了: $APP_DIR (version=$APP_VERSION, build=$APP_BUILD, commit=${APP_COMMIT:0:7})"
+# 短縮すると -dirty が切り落ちて、人が唯一目にする場所から警告が消えるため付け直す
+SHORT_COMMIT="${APP_COMMIT:0:7}"
+case "$APP_COMMIT" in *-dirty) SHORT_COMMIT="${SHORT_COMMIT}-dirty" ;; esac
+echo "生成完了: $APP_DIR (version=$APP_VERSION, build=$APP_BUILD, commit=$SHORT_COMMIT)"
 echo "インストール: cp -R \"$APP_DIR\" /Applications/"
 echo "ログイン時に自動起動するには: システム設定 > 一般 > ログイン項目 に追加"
