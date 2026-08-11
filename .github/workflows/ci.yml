@@ -12,4 +12,12 @@ jobs:
       - uses: actions/checkout@v4
       - run: swift --version
       - run: swift build
+      # テストには実機サンプリング検証と Mach ポートリークの回帰テストを含む
       - run: swift test
+      - name: 実機サンプリングのスモークテスト
+        run: swift run truemem --print
+      - name: .app バンドル生成と検証
+        run: |
+          scripts/make-app.sh
+          plutil -lint "dist/TrueMem.app/Contents/Info.plist"
+          codesign --verify --strict "dist/TrueMem.app"

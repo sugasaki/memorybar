@@ -46,8 +46,8 @@ struct MenuContentView: View {
             subRow("確保済みメモリ", MemoryFormat.detail(snapshot.wired))
             subRow("圧縮", MemoryFormat.detail(snapshot.compressed))
             row("キャッシュされたファイル", MemoryFormat.detail(snapshot.cachedFiles))
-            row("使用済みスワップ", MemoryFormat.detail(snapshot.swapUsed))
-            row("残容量", MemoryFormat.detail(snapshot.free), bold: true)
+            row("使用済みスワップ", snapshot.swapUsed.map(MemoryFormat.detail) ?? "--")
+            row("残容量", MemoryFormat.detail(snapshot.available), bold: true)
             HStack {
                 Text("メモリプレッシャー")
                 Spacer()
@@ -105,6 +105,7 @@ struct MenuContentView: View {
         case .normal: .green
         case .warning: .yellow
         case .critical: .red
+        case .unknown: .gray
         }
     }
 }

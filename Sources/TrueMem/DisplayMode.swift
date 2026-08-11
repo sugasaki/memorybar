@@ -21,7 +21,7 @@ enum DisplayMode: String, CaseIterable, Identifiable, Sendable {
     /// メニューバー用の短い表示文字列
     func menuBarText(for snapshot: MemorySnapshot) -> String {
         switch self {
-        case .freeGB: Self.compactGB(snapshot.free)
+        case .freeGB: Self.compactGB(snapshot.available)
         case .usedGB: Self.compactGB(snapshot.used)
         case .usedPercent: "\(Int((snapshot.usedFraction * 100).rounded()))%"
         }
