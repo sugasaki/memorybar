@@ -5,6 +5,8 @@ import SwiftUI
 struct MenuContentView: View {
     let monitor: MemoryMonitor
     let updateController: UpdateController
+    let floatingController: FloatingWindowController
+    @State private var floatingVisible = false
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
     var body: some View {
@@ -19,6 +21,7 @@ struct MenuContentView: View {
             }
             Divider()
             settings
+            floating
             Divider()
             updates
             Divider()
@@ -76,6 +79,15 @@ struct MenuContentView: View {
         .font(.callout)
         // メニューバーの文字列は更新時にしか作られないため、切り替えを即座に反映させる
         .onChange(of: displayModeRaw) { monitor.refreshMenuBarText() }
+    }
+
+    private var floating: some View {
+        Toggle("フローティング表示", isOn: $floatingVisible)
+            .font(.callout)
+            .toggleStyle(.checkbox)
+            // パネルを開くたびに実際の状態へ合わせる
+            .onAppear { floatingVisible = floatingController.isVisible }
+            .onChange(of: floatingVisible) { floatingController.isVisible = floatingVisible }
     }
 
     private var updates: some View {

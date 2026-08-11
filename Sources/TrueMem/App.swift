@@ -206,9 +206,19 @@ final class MemoryMonitor {
 
 struct TrueMemApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var monitor = MemoryMonitor()
+    @State private var monitor: MemoryMonitor
     @State private var updateController = UpdateController.shared
+    @State private var floatingController: FloatingWindowController
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
+
+    init() {
+        let monitor = MemoryMonitor()
+        let floating = FloatingWindowController(monitor: monitor)
+        _monitor = State(initialValue: monitor)
+        _floatingController = State(initialValue: floating)
+        // ウィンドウの生成は起動完了後に回す(init 中に前面化しても反映されない)
+        Task { @MainActor in floating.restore() }
+    }
 
     private var displayMode: DisplayMode {
         DisplayMode(rawValue: displayModeRaw) ?? .default
@@ -216,7 +226,9 @@ struct TrueMemApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(monitor: monitor, updateController: updateController)
+            MenuContentView(
+                monitor: monitor, updateController: updateController,
+                floatingController: floatingController)
         } label: {
             // Label(_:systemImage:) を渡すと SwiftUI はアイコンだけを
             // NSStatusItem に設定し、数値が描画されない(Issue #25)。
