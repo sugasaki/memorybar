@@ -101,9 +101,10 @@ struct MenuContentView: View {
     }
 
     /// 使用率バーの色。プレッシャーが取得不能でも使用率自体は有効な値なので、
-    /// バーまで灰色にして「値が取れていない」と誤読させない
+    /// バーまで灰色にして「値が取れていない」と誤読させない。
+    /// アクセントカラーはユーザー設定で灰色(グラファイト)や赤にできてしまうため使わない
     private func usageBarTint(_ pressure: MemoryPressure) -> Color {
-        pressure == .unknown ? .accentColor : pressureColor(pressure)
+        pressure == .unknown ? .blue : pressureColor(pressure)
     }
 
     private func pressureColor(_ pressure: MemoryPressure) -> Color {

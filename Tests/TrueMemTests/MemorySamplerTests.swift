@@ -64,15 +64,19 @@ final class MemorySamplerTests: XCTestCase {
         XCTAssertEqual(truemem_host_vm_info64_count(), sizeBased)
     }
 
-    /// ページサイズは全計算の乗数なので、取得できないと値が全て 0 になる
-    func testカーネルページサイズが取得できホストポート版と一致する() {
-        let kernelPageSize = truemem_kernel_page_size()
-        XCTAssertGreaterThan(kernelPageSize, 0)
+    /// ページサイズは全計算の乗数なので、取り違えると全ての表示値が定数倍ずれる。
+    /// 定数同士の比較(host_page_size は実装上 vm_kernel_page_size を返すため常に真)ではなく、
+    /// 本番経路の値がカーネルページ単位に整合しているかを検証する
+    func testサンプリング結果がカーネルページサイズと整合する() throws {
+        let pageSize = UInt64(truemem_kernel_page_size())
+        XCTAssertGreaterThan(pageSize, 0)
 
-        let host = mach_host_self()
-        defer { mach_port_deallocate(mach_task_self_, host) }
-        var hostPageSize: vm_size_t = 0
-        XCTAssertEqual(host_page_size(host, &hostPageSize), KERN_SUCCESS)
-        XCTAssertEqual(kernelPageSize, hostPageSize)
+        let snapshot = try XCTUnwrap(MemorySampler.sample())
+        // ページ数×ページサイズで算出しているので、各項は必ずページサイズの倍数になる
+        XCTAssertEqual(snapshot.wired % pageSize, 0)
+        XCTAssertEqual(snapshot.compressed % pageSize, 0)
+        XCTAssertEqual(snapshot.appMemory % pageSize, 0)
+        // 物理メモリもカーネルページの整数倍(4096 を取り違えると成立しない環境がある)
+        XCTAssertEqual(snapshot.total % pageSize, 0)
     }
 }

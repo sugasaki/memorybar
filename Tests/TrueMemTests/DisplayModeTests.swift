@@ -37,6 +37,13 @@ final class DisplayModeTests: XCTestCase {
         XCTAssertEqual(DisplayMode.usedPercent.menuBarText(for: snapshot), "50%")
     }
 
+    func test取得できなかった値は取得不能と表示される() {
+        XCTAssertEqual(MemoryFormat.detail(nil as UInt64?), "取得不能")
+        // 0 バイトは「取得不能」と区別される(0 に潰さないことがこのプロジェクトの要件)
+        XCTAssertNotEqual(MemoryFormat.detail(0 as UInt64?), "取得不能")
+        XCTAssertEqual(MemoryPressure.unknown.label, MemoryFormat.unavailable)
+    }
+
     func test未知のrawValueはデフォルトにフォールバックする() {
         XCTAssertNil(DisplayMode(rawValue: "unknown"))
         XCTAssertEqual(DisplayMode.default, .freeGB)

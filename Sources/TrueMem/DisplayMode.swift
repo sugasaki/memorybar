@@ -42,8 +42,11 @@ enum MemoryFormat {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .memory)
     }
 
-    /// 取得できなかった値を一貫した表記で返す(表示面ごとに文言がぶれないようにする)
+    /// 取得できなかった値を一貫した表記で返す(表示面ごとに文言がぶれないようにする)。
+    /// `map(detail)` は非Optional版のシグネチャが変わると静かにこの関数自身へ
+    /// 解決されて無限再帰しうるため、明示的に分岐する
     static func detail(_ bytes: UInt64?) -> String {
-        bytes.map(detail) ?? unavailable
+        guard let bytes else { return unavailable }
+        return detail(bytes)
     }
 }
