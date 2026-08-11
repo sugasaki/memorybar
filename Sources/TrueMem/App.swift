@@ -199,10 +199,12 @@ struct TrueMemApp: App {
         MenuBarExtra {
             MenuContentView(monitor: monitor, updateController: updateController)
         } label: {
-            if let snapshot = monitor.snapshot {
-                Label(displayMode.menuBarText(for: snapshot), systemImage: "memorychip")
-            } else {
-                Label("--", systemImage: "memorychip")
+            // Label(_:systemImage:) を渡すと SwiftUI はアイコンだけを
+            // NSStatusItem に設定し、数値が描画されない(Issue #25)。
+            // 常時表示が本アプリの中心機能なので、テキストで描画する
+            HStack(spacing: 3) {
+                Image(systemName: "memorychip")
+                Text(monitor.snapshot.map(displayMode.menuBarText(for:)) ?? "--")
             }
         }
         .menuBarExtraStyle(.window)
