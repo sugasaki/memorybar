@@ -52,8 +52,10 @@ final class MemorySamplerTests: XCTestCase {
 
     @MainActor
     func testタイマーの許容誤差は更新間隔の10パーセント() {
-        XCTAssertEqual(MemoryMonitor.refreshInterval, 2.0)
-        XCTAssertEqual(MemoryMonitor.timerTolerance, 0.2)
+        XCTAssertEqual(MemoryMonitor.refreshInterval, 1.0)
+        // 間隔を変えたときに許容誤差だけ取り残されないよう、比率で検証する
+        XCTAssertEqual(
+            MemoryMonitor.timerTolerance, MemoryMonitor.refreshInterval * 0.1, accuracy: 0.0001)
     }
 
     /// 公式マクロ経由の要素数が構造体サイズと乖離したら検出する

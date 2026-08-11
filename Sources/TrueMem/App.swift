@@ -136,12 +136,13 @@ enum Main {
     }
 }
 
-/// 約2秒間隔でメモリ状況を再計測する監視モデル
+/// 約1秒間隔でメモリ状況を再計測する監視モデル
 @Observable
 @MainActor
 final class MemoryMonitor {
-    static let refreshInterval: TimeInterval = 2.0
-    static let timerTolerance: TimeInterval = 0.2
+    static let refreshInterval: TimeInterval = 1.0
+    /// 省電力のためタイマーに許す誤差。更新間隔から導出し、間隔を変えても比率がずれないようにする
+    static let timerTolerance: TimeInterval = refreshInterval * 0.1
 
     private(set) var snapshot: MemorySnapshot?
     private var currentPressure = MemorySampler.initialPressure()
