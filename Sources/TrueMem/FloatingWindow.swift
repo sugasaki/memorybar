@@ -6,6 +6,8 @@ import SwiftUI
 /// 高さが足りないときは内訳から順に省き、要約は必ず残す
 struct FloatingContentView: View {
     let monitor: MemoryMonitor
+    /// 閉じるボタンの動作。ウィンドウを隠すだけでなく設定も切り替える
+    let onClose: () -> Void
 
     /// この高さを下回ったら内訳を省く(要約だけでも読めるようにする)
     private static let breakdownMinHeight: CGFloat = 210
@@ -42,9 +44,15 @@ struct FloatingContentView: View {
 
     private func header(_ snapshot: MemorySnapshot) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: "memorychip")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // ホバーで出す方式はこのウィンドウが key にならないため確実性に欠ける。
+            // 常時表示にして、押せることが常に分かるようにする
+            Button(action: onClose) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("フローティング表示を閉じる")
             Text("TrueMem")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -187,7 +195,11 @@ final class FloatingWindowController {
         // .accessory なアプリでもクリックでアプリを前面化させない
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
-        panel.contentView = NSHostingView(rootView: FloatingContentView(monitor: monitor))
+        panel.contentView = NSHostingView(
+            rootView: FloatingContentView(monitor: monitor) { [weak self] in
+                // 設定ごと切り替える。次回起動時に勝手に復活させないため
+                self?.isVisible = false
+            })
 
         // 位置とサイズを記憶する
         panel.setFrameAutosaveName(Self.frameAutosaveName)
