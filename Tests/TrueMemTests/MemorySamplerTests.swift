@@ -13,6 +13,9 @@ final class MemorySamplerTests: XCTestCase {
         XCTAssertLessThanOrEqual(snapshot.used, snapshot.total)
     }
 
+    /// 注意: このテストは成功パスしか通らないため、`sample()` が同一スコープの `defer` で
+    /// 解放していることが前提。各 return 直前で解放する形にリファクタすると、
+    /// 早期 return 経路のリークをこのテストは検出できない(AGENTS.md の Mach ポート規律を参照)
     func test連続サンプリングでもMachポート送信権がリークしない() throws {
         // ウォームアップ(遅延初期化などの影響を除外)
         _ = MemorySampler.sample()
@@ -59,5 +62,17 @@ final class MemorySamplerTests: XCTestCase {
         let sizeBased = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
         XCTAssertEqual(truemem_host_vm_info64_count(), sizeBased)
+    }
+
+    /// ページサイズは全計算の乗数なので、取得できないと値が全て 0 になる
+    func testカーネルページサイズが取得できホストポート版と一致する() {
+        let kernelPageSize = truemem_kernel_page_size()
+        XCTAssertGreaterThan(kernelPageSize, 0)
+
+        let host = mach_host_self()
+        defer { mach_port_deallocate(mach_task_self_, host) }
+        var hostPageSize: vm_size_t = 0
+        XCTAssertEqual(host_page_size(host, &hostPageSize), KERN_SUCCESS)
+        XCTAssertEqual(kernelPageSize, hostPageSize)
     }
 }

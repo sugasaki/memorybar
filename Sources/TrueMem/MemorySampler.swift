@@ -8,7 +8,8 @@ enum MemorySampler {
     /// アクティビティモニタと同じデータソース(host_statistics64)から1回サンプリングする。
     /// pressureを省略したCLI利用時だけ、互換レイヤーから起動時相当の値を取得する。
     static func sample(pressure: MemoryPressure? = nil) -> MemorySnapshot? {
-        // mach_host_self()は呼ぶたびに送信権の参照が増えるため、1回だけ取得して必ず解放する
+        // mach_host_self()は呼ぶたびに送信権の参照が増える。解放しないと上限(65535)まで
+        // 蓄積する規約違反になるため、1回だけ取得して必ず解放する
         let host = mach_host_self()
         defer { mach_port_deallocate(mach_task_self_, host) }
 
@@ -21,15 +22,13 @@ enum MemorySampler {
         }
         guard result == KERN_SUCCESS else { return nil }
 
-        var pageSize: vm_size_t = 0
-        guard host_page_size(host, &pageSize) == KERN_SUCCESS, pageSize > 0 else {
-            return nil
-        }
         guard let total = sysctlUInt64("hw.memsize") else { return nil }
 
         return MemorySnapshot(
             totalBytes: total,
-            pageSize: UInt64(pageSize),
+            // vm_statistics64のページカウントはカーネルページ単位。
+            // host_page_sizeと同値だがホストポートを要さず、単位としてこちらが正しい
+            pageSize: UInt64(truemem_kernel_page_size()),
             internalPages: UInt64(stats.internal_page_count),
             purgeablePages: UInt64(stats.purgeable_count),
             wiredPages: UInt64(stats.wire_count),
@@ -42,6 +41,12 @@ enum MemorySampler {
 
     /// DispatchSourceが最初のイベントを通知するまでの同期初期値。
     /// 非公開sysctlへの依存をここだけに閉じ込め、失敗・未知値はunknownのまま返す。
+    ///
+    /// 生値のエンコーディングは実測で確定している(2026-08-11 / macOS 26.5 arm64):
+    /// プレッシャー正常時に1、逼迫時(圧縮9.4GB)に2。XNU内部の別エンコーディング
+    /// (0=normal系)なら正常時は0のはずで、1は観測されない。よって1/2/4で確定。
+    /// 未知値をnormalに倒す案があるが、「分からないのに正常と表示する」ことになり
+    /// Issue #6 の趣旨に反するため採らない(unknownは安全側の失敗)。
     static func initialPressure() -> MemoryPressure {
         var level: Int32 = 0
         var size = MemoryLayout<Int32>.size

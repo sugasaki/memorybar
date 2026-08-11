@@ -35,7 +35,7 @@ struct MenuContentView: View {
                     .foregroundStyle(.secondary)
             }
             ProgressView(value: snapshot.usedFraction)
-                .tint(pressureColor(snapshot.pressure))
+                .tint(usageBarTint(snapshot.pressure))
         }
     }
 
@@ -46,7 +46,7 @@ struct MenuContentView: View {
             subRow("確保済みメモリ", MemoryFormat.detail(snapshot.wired))
             subRow("圧縮", MemoryFormat.detail(snapshot.compressed))
             row("キャッシュされたファイル", MemoryFormat.detail(snapshot.cachedFiles))
-            row("使用済みスワップ", snapshot.swapUsed.map(MemoryFormat.detail) ?? "--")
+            row("使用済みスワップ", MemoryFormat.detail(snapshot.swapUsed))
             row("残容量", MemoryFormat.detail(snapshot.available), bold: true)
             HStack {
                 Text("メモリプレッシャー")
@@ -98,6 +98,12 @@ struct MenuContentView: View {
         }
         .font(.callout)
         .padding(.leading, 12)
+    }
+
+    /// 使用率バーの色。プレッシャーが取得不能でも使用率自体は有効な値なので、
+    /// バーまで灰色にして「値が取れていない」と誤読させない
+    private func usageBarTint(_ pressure: MemoryPressure) -> Color {
+        pressure == .unknown ? .accentColor : pressureColor(pressure)
     }
 
     private func pressureColor(_ pressure: MemoryPressure) -> Color {

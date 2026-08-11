@@ -24,3 +24,5 @@ jobs:
           test "$(plutil -extract CFBundleShortVersionString raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "0.1.0"
           test "$(plutil -extract CFBundleVersion raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "1"
           codesign --verify --deep --strict "dist/TrueMem.app"
+          # --verify はシールの整合性しか見ないため、署名の存在自体も確認する
+          codesign -dv --verbose=4 "dist/TrueMem.app"
