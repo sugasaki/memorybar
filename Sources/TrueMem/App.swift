@@ -17,6 +17,14 @@ private final class MemoryMonitorResources: @unchecked Sendable {
 @main
 enum Main {
     static func main() {
+        // 取り違えると意図しない副作用(インストール)が起きるため、併用は明示的に拒否する
+        if CommandLine.arguments.contains("--check-update"),
+            CommandLine.arguments.contains("--install-update")
+        {
+            FileHandle.standardError.write(
+                Data("--check-update と --install-update は同時に指定できません\n".utf8))
+            exit(64)
+        }
         // 検証用: --printで1サンプルを標準出力に出して終了する
         if CommandLine.arguments.contains("--print") {
             printSample()
@@ -27,7 +35,56 @@ enum Main {
             printUpdateStatus()
             return
         }
+        // 検証用: 更新があれば実際にインストールする。
+        // GUI ではパネルのボタン操作が同意にあたるが、ここでは実行自体が同意にあたる
+        if CommandLine.arguments.contains("--install-update") {
+            installUpdateFromCLI()
+            return
+        }
         TrueMemApp.main()
+    }
+
+    private static func installUpdateFromCLI() {
+        // 差し替えスクリプトは「起動元プロセスの終了」を待つ。CLI から実行すると
+        // 待つ相手が CLI 自身になるため、常駐中の GUI があるとその実行中バンドルを
+        // 上書きしてしまう(利用者には旧版が動いたままに見える)
+        if let running = otherRunningInstance() {
+            FileHandle.standardError.write(
+                Data(
+                    """
+                    TrueMem が起動中のため実行できません (pid=\(running))。
+                    メニューの「インストールして再起動」を使うか、先に TrueMem を終了してください。
+
+                    """.utf8))
+            exit(1)
+        }
+        do {
+            let release = try Updater.fetchLatestRelease()
+            guard Updater.isUpdateAvailable(release) else {
+                print("更新はありません(現在: \(UpdateController.currentVersionLabel))")
+                return
+            }
+            print("インストールします: \(Updater.shortCommit(release.commit))")
+            // 成功するとプロセスが終了するため、以降は実行されない
+            try Updater.downloadAndInstall(release)
+        } catch let error as Updater.UpdateError {
+            let detail = [error.errorDescription, error.recoverySuggestion]
+                .compactMap { $0 }.joined(separator: " / ")
+            FileHandle.standardError.write(Data("\(detail)\n".utf8))
+            exit(1)
+        } catch {
+            FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
+    }
+
+    /// 自分以外に同じアプリが動いていれば、その pid を返す
+    private static func otherRunningInstance() -> pid_t? {
+        guard let identifier = Bundle.main.bundleIdentifier else { return nil }
+        let selfPID = ProcessInfo.processInfo.processIdentifier
+        return NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+            .map(\.processIdentifier)
+            .first { $0 != selfPID }
     }
 
     private static func printUpdateStatus() {

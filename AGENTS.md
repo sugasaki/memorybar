@@ -56,7 +56,8 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - GitHub API は**タグが既存だと `target_commitish` を無視する**ため、リリースは `edit` せず毎回タグごと作り直す。加えて差し替え直前に新バンドルの `TMSourceCommit` と `CFBundleIdentifier` を検証する（API の仕様に依存しない歯止め）
   - **差し替えは「退避 → 展開 → 削除」で置換する**。`ditto` は既存バンドルへマージするため、そのまま上書きすると旧版のファイルが残り署名シールが壊れる
   - 差し替えスクリプトは失敗時に必ず旧バンドルへロールバックし、アプリを再起動する（黙って消えるのが最悪の失敗）。ログは `~/Library/Logs/TrueMem-update.log`
-  - 動作確認は `dist/TrueMem.app/Contents/MacOS/truemem --check-update`（インストールはしない）。`swift run` では `.app` でないため更新判定まで確認できない
+  - **インストールの同意はメニューパネルのボタン操作で取る**。メニューバー常駐（`.accessory`）アプリでは `NSAlert.runModal()` が操作を待たずに先頭ボタンの応答を返すことがあり、同意の確認手段として使えない（Issue #22 で実際に無操作のまま自動インストールされた）。更新確認とインストールは必ず分けること
+  - 動作確認は `dist/TrueMem.app/Contents/MacOS/truemem --check-update`（インストールはしない）と `--install-update`（実際に適用する）。`swift run` では `.app` でないため更新判定まで確認できない
 
 ## 開発規約
 
