@@ -35,6 +35,7 @@ enum MemorySampler {
             compressedPages: UInt64(stats.compressor_page_count),
             externalPages: UInt64(stats.external_page_count),
             freePages: UInt64(stats.free_count),
+            speculativePages: UInt64(stats.speculative_count),
             swapUsedBytes: swapUsedBytes(),
             pressure: pressure ?? initialPressure()
         )

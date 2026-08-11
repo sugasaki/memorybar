@@ -12,7 +12,8 @@ final class DisplayModeTests: XCTestCase {
             internalPages: 0, purgeablePages: 0,
             wiredPages: usedBytes,
             compressedPages: 0, externalPages: 0,
-            freePages: totalBytes - usedBytes,
+            freePages: totalBytes > usedBytes ? totalBytes - usedBytes : 0,
+            speculativePages: 0,
             swapUsedBytes: 0, pressure: .normal)
     }
 

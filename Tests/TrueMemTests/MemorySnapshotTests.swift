@@ -14,6 +14,7 @@ final class MemorySnapshotTests: XCTestCase {
         compressedPages: UInt64 = 80_000,
         externalPages: UInt64 = 150_000,
         freePages: UInt64 = 30_000,
+        speculativePages: UInt64 = 5_000,
         swapUsedBytes: UInt64? = 0,
         pressure: MemoryPressure = .normal
     ) -> MemorySnapshot {
@@ -26,6 +27,7 @@ final class MemorySnapshotTests: XCTestCase {
             compressedPages: compressedPages,
             externalPages: externalPages,
             freePages: freePages,
+            speculativePages: speculativePages,
             swapUsedBytes: swapUsedBytes,
             pressure: pressure
         )
@@ -36,31 +38,50 @@ final class MemorySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.appMemory, 480_000 * pageSize)
     }
 
-    func test残容量は未使用とキャッシュの合計になる() {
-        // 解放できる領域が残容量。これを一次的な定義とする
-        let snapshot = makeSnapshot(purgeablePages: 20_000, externalPages: 150_000, freePages: 30_000)
-        XCTAssertEqual(snapshot.available, (30_000 + 170_000) * pageSize)
-    }
-
-    func test使用済みは物理メモリから残容量を引いた値になる() {
-        // アクティビティモニタの「使用済みメモリ」は3内訳の合計ではない(Issue #24)
+    /// 恒真式にならないよう、期待値をページ数から直接計算した具体値で固定する。
+    /// 既定値: internal=500,000 purgeable=20,000 wired=100,000 compressed=80,000
+    ///         external=150,000 free=30,000 speculative=5,000 / 総ページ=1,572,864
+    func test各値が具体的なページ数から算出される() {
         let snapshot = makeSnapshot()
-        XCTAssertEqual(snapshot.used, totalBytes - snapshot.available)
+        // 未使用 = free − speculative = 25,000
+        XCTAssertEqual(snapshot.unused, 25_000 * pageSize)
+        // キャッシュ = external + purgeable = 170,000
+        XCTAssertEqual(snapshot.cachedFiles, 170_000 * pageSize)
+        // 残容量 = 25,000 + 170,000 = 195,000
+        XCTAssertEqual(snapshot.available, 195_000 * pageSize)
+        // 使用済み = 1,572,864 − 195,000 = 1,377,864
+        XCTAssertEqual(snapshot.used, 1_377_864 * pageSize)
+        // その他 = 1,377,864 − (480,000 + 100,000 + 80,000) = 717,864
+        XCTAssertEqual(snapshot.other, 717_864 * pageSize)
     }
 
-    func test使用済みと残容量は必ず物理メモリに一致する() {
+    func testSpeculativeは未使用から除かれる() {
+        // free_count は speculative を含み、speculative は external にも含まれる。
+        // 引かないと二重計上になり、残容量が過大・使用済みが過小になる(Issue #24)
+        let withSpeculative = makeSnapshot(freePages: 30_000, speculativePages: 5_000)
+        let withoutSpeculative = makeSnapshot(freePages: 30_000, speculativePages: 0)
+        XCTAssertEqual(
+            withoutSpeculative.available - withSpeculative.available, 5_000 * pageSize)
+        XCTAssertEqual(withSpeculative.unused, 25_000 * pageSize)
+    }
+
+    func testSpeculativeがfreeを上回っても未使用は負にならない() {
+        let snapshot = makeSnapshot(freePages: 100, speculativePages: 5_000)
+        XCTAssertEqual(snapshot.unused, 0)
+    }
+
+    func test使用済みと残容量の合計は物理メモリに一致する() {
         // 別々に算出すると食い違うため、片方をもう片方から導出している
-        for free in [UInt64(0), 30_000, 500_000] {
-            let snapshot = makeSnapshot(freePages: free)
+        for (free, spec) in [(UInt64(0), UInt64(0)), (30_000, 5_000), (500_000, 1_000)] {
+            let snapshot = makeSnapshot(freePages: free, speculativePages: spec)
             XCTAssertEqual(snapshot.used + snapshot.available, totalBytes)
         }
     }
 
-    func testその他は使用済みと3内訳の差になる() {
+    func testその他を足すと内訳の合計が使用済みに一致する() {
         // これを示さないと画面上で内訳の合計が使用済みと合わない
         let snapshot = makeSnapshot()
         let categorized = snapshot.appMemory + snapshot.wired + snapshot.compressed
-        XCTAssertEqual(snapshot.other, snapshot.used - categorized)
         XCTAssertEqual(categorized + snapshot.other, snapshot.used)
     }
 
@@ -103,7 +124,8 @@ final class MemorySnapshotTests: XCTestCase {
         let snapshot = MemorySnapshot(
             totalBytes: 0, pageSize: pageSize,
             internalPages: 0, purgeablePages: 0, wiredPages: 0,
-            compressedPages: 0, externalPages: 0, freePages: 0, swapUsedBytes: 0,
+            compressedPages: 0, externalPages: 0, freePages: 0, speculativePages: 0,
+            swapUsedBytes: 0,
             pressure: .normal)
         XCTAssertEqual(snapshot.usedFraction, 0)
     }

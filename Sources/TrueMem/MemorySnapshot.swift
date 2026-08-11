@@ -56,7 +56,10 @@ struct MemorySnapshot: Sendable, Equatable {
     let compressed: UInt64
     /// キャッシュされたファイル = (external + purgeable) × ページサイズ
     let cachedFiles: UInt64
-    /// どのプロセスにも割り当てられていないページ(vm_statの「free」)
+    /// 何も保持していない純粋な空きページ。
+    /// `free_count` は先読みされたファイル内容を持つ speculative ページを含み、
+    /// それは `external_page_count` にも入っているため、引かないと二重計上になる
+    /// (`vm_stat` の「Pages free」も `free_count − speculative` を表示している)
     let unused: UInt64
     /// 使用済みスワップ(バイト)。取得失敗時はnil(0と区別する)
     let swapUsed: UInt64?
@@ -96,6 +99,7 @@ struct MemorySnapshot: Sendable, Equatable {
         compressedPages: UInt64,
         externalPages: UInt64,
         freePages: UInt64,
+        speculativePages: UInt64,
         swapUsedBytes: UInt64?,
         pressure: MemoryPressure
     ) {
@@ -106,7 +110,9 @@ struct MemorySnapshot: Sendable, Equatable {
         self.wired = wiredPages * pageSize
         self.compressed = compressedPages * pageSize
         self.cachedFiles = (externalPages + purgeablePages) * pageSize
-        self.unused = freePages * pageSize
+        // speculative は external 側で数えるため、free からは除く
+        let trulyFree = freePages > speculativePages ? freePages - speculativePages : 0
+        self.unused = trulyFree * pageSize
         self.swapUsed = swapUsedBytes
         self.pressure = pressure
     }
