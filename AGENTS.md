@@ -1,10 +1,10 @@
-# memory-info-menubar — AI エージェント向けガイド
+# TrueMem — AI エージェント向けガイド
 
 このリポジトリで作業するすべての AI エージェント向けのガイド（特定製品に依存せず、`AGENTS.md` を読むエージェントすべてが対象。Claude Code / Codex / opencode / GLM / Cursor / Gemini など）。
 **このファイルが正本**。`CLAUDE.md` は Claude Code 用の参照スタブで、中身はここに集約する。
 
 ## プロジェクト概要
-macOS のメニューバーに常駐し、メモリの残量・使用量をリアルタイム表示するネイティブアプリ。
+TrueMem — macOS のメニューバーに常駐し、メモリの残量・使用量をリアルタイム表示するネイティブアプリ。名前は「既存の類似アプリのような乖離のない、真の(true)メモリ値を表示する」ことに由来する。
 **アクティビティモニタと同じデータソース（Mach API `host_statistics64`）・同じ計算式**を使い、既存の類似アプリのような乖離のない正確な値を表示することが最重要の要件。
 
 - 使用済みメモリ = アプリメモリ（internal − purgeable）+ 確保済み（wired）+ 圧縮（compressor）
@@ -28,18 +28,18 @@ scripts/make-app.sh    # 配布用 .app バンドルを dist/ に生成
 
 ## ファイル構成
 - `Package.swift` — SPM マニフェスト
-- `Sources/MemoryInfoMenubar/`
+- `Sources/TrueMem/`
   - `App.swift` — エントリポイント（`MenuBarExtra`・アクセサリ化）
   - `MemorySampler.swift` — Mach / sysctl からの計測（副作用はここに隔離）
   - `MemorySnapshot.swift` — 計測値から使用量・残量を導出する純粋ロジック
   - `DisplayMode.swift` — メニューバー表示モードとフォーマット
   - `MenuContentView.swift` — クリック時の詳細パネル
-- `Tests/MemoryInfoMenubarTests/` — 純粋ロジックのユニットテスト
+- `Tests/TrueMemTests/` — 純粋ロジックのユニットテスト
 - `scripts/make-app.sh` — .app バンドル生成スクリプト
 
 ## 開発パターン
 - **計算ロジックと計測を分離する**: Mach API 呼び出し（`MemorySampler`）と数値の導出（`MemorySnapshot`）を分け、導出側は生のページカウントを受け取る純粋関数としてテストする
-- **値の正確性が最優先**: 表示値の計算式を変更する場合は、アクティビティモニタの表示と突き合わせて検証する（`swift run memory-info-menubar --print` で1回分のサンプルを標準出力に出せる）
+- **値の正確性が最優先**: 表示値の計算式を変更する場合は、アクティビティモニタの表示と突き合わせて検証する（`swift run truemem --print` で1回分のサンプルを標準出力に出せる）
 - ページサイズは `vm_kernel_page_size` を使う（Apple Silicon は 16KB。4096 をハードコードしない）
 - 外部ライブラリを追加しない（追加が必要と考える場合は利用者に確認）
 
