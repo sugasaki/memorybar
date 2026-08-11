@@ -11,6 +11,9 @@ struct FloatingContentView: View {
 
     /// この高さを下回ったら内訳を省く(要約だけでも読めるようにする)
     private static let breakdownMinHeight: CGFloat = 210
+    /// 内訳に加えてアプリ一覧まで出すのに必要な高さ。
+    /// 既定サイズがこれを下回ると一覧が一度も出ないため、テストで関係を固定している
+    static let topAppsMinHeight: CGFloat = 420
 
     var body: some View {
         GeometryReader { geometry in
@@ -22,6 +25,10 @@ struct FloatingContentView: View {
                     if geometry.size.height >= Self.breakdownMinHeight {
                         Divider()
                         breakdown(snapshot)
+                    }
+                    if geometry.size.height >= Self.topAppsMinHeight, !monitor.topApps.isEmpty {
+                        Divider()
+                        TopAppsView(apps: monitor.topApps)
                     }
                     Spacer(minLength: 0)
                 } else {
@@ -132,7 +139,7 @@ final class FloatingWindowController {
     nonisolated static let defaultsKey = "floatingWindowVisible"
     nonisolated static let frameAutosaveName = "TrueMemFloatingWindow"
     /// 内訳まで収まる既定サイズ
-    nonisolated static let defaultSize = NSSize(width: 300, height: 286)
+    nonisolated static let defaultSize = NSSize(width: 300, height: 470)
     /// これ以上小さくすると要約すら読めなくなる
     nonisolated static let minimumSize = NSSize(width: 220, height: 118)
 

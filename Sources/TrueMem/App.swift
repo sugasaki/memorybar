@@ -30,6 +30,11 @@ enum Main {
             printSample()
             return
         }
+        // 検証用: 使用量の多いアプリを標準出力に出す
+        if CommandLine.arguments.contains("--apps") {
+            printTopApps()
+            return
+        }
         // 検証用: 更新確認だけを行って結果を標準出力に出す(インストールはしない)
         if CommandLine.arguments.contains("--check-update") {
             printUpdateStatus()
@@ -85,6 +90,40 @@ enum Main {
         return NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
             .map(\.processIdentifier)
             .first { $0 != selfPID }
+    }
+
+    @MainActor
+    private static func printTopApps() {
+        let apps = ProcessSampler.topApps()
+        guard !apps.isEmpty else {
+            FileHandle.standardError.write(Data("プロセス情報を取得できませんでした\n".utf8))
+            exit(1)
+        }
+        // %s は日本語を含む文字列で空欄になるため自前で揃える。
+        // padding(toLength:) は UTF-16 長で数えるため絵文字などで切り詰められる。
+        // 全角の表示幅も考慮し、幅を数えて空白を足す
+        func displayWidth(_ text: String) -> Int {
+            text.unicodeScalars.reduce(0) { width, scalar in
+                // 全角・絵文字はおおむね2列分を占める
+                switch scalar.value {
+                case 0x1100...0x115F, 0x2E80...0xA4CF, 0xAC00...0xD7A3,
+                    0xF900...0xFAFF, 0xFE30...0xFE6F, 0xFF00...0xFF60,
+                    0xFFE0...0xFFE6, 0x1F300...0x1FAFF:
+                    return width + 2
+                default:
+                    return width + 1
+                }
+            }
+        }
+        let nameWidth = max(28, apps.map { displayWidth($0.name) }.max() ?? 0)
+        for app in apps {
+            let padding = String(repeating: " ", count: max(1, nameWidth - displayWidth(app.name)))
+            print(
+                "\(app.name)\(padding)  \(MemoryFormat.detail(app.footprint))  (\(app.processCount) プロセス)"
+            )
+        }
+        let total = apps.reduce(UInt64(0)) { $0 + $1.footprint }
+        print("合計: \(MemoryFormat.detail(total))  ※圧縮・スワップ済みを含むため物理メモリを超えうる")
     }
 
     private static func printUpdateStatus() {
@@ -150,6 +189,12 @@ final class MemoryMonitor {
     /// メニューバーに出す文字列。値が動いても表示が変わらないティックでは更新しないことで、
     /// 再描画を省く(1秒間隔では約半分のティックが該当する)
     private(set) var menuBarText: String = "--"
+    /// 使用量の多いアプリ。全プロセスの走査に約2msかかるため、毎ティックではなく間引いて更新する
+    private(set) var topApps: [AppMemoryUsage] = []
+    /// アプリ一覧を更新する間隔(秒)。順位はそう頻繁に入れ替わらない
+    static let appsRefreshInterval: TimeInterval = 5.0
+    /// 前回の走査時刻。回数で数えると、タイマー以外からの refresh() で間引きが崩れる
+    private var lastAppsRefresh: Date?
     private var currentPressure = MemorySampler.initialPressure()
     private let resources = MemoryMonitorResources()
 
@@ -169,7 +214,19 @@ final class MemoryMonitor {
 
     func refresh() {
         snapshot = MemorySampler.sample(pressure: currentPressure)
+        refreshTopAppsIfDue()
         refreshMenuBarText()
+    }
+
+    /// 時刻で間引く。「まだ一度も取得していない」と「取得したが空だった」を区別しないと、
+    /// 取得できない環境で毎ティック全プロセスを走査し続けることになる
+    private func refreshTopAppsIfDue() {
+        let now = Date()
+        if let last = lastAppsRefresh, now.timeIntervalSince(last) < Self.appsRefreshInterval {
+            return
+        }
+        lastAppsRefresh = now
+        topApps = ProcessSampler.topApps()
     }
 
     /// 表示モードの変更時にも即座に反映できるよう分けている
