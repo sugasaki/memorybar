@@ -7,6 +7,9 @@ enum UpdateState: Sendable, Equatable {
     case checking
     case installing
     case upToDate
+    /// ビルド元コミットが不明で、最新かどうか判定できない状態。
+    /// 「最新版です」と断言しないために .upToDate と区別する
+    case undeterminable
     case available(Updater.ReleaseInfo)
     case checkFailed(String)
     /// インストールの失敗。再試行できるよう対象のリリースを保持する
@@ -18,6 +21,7 @@ enum UpdateState: Sendable, Equatable {
         case .checking: "確認中…"
         case .installing: "インストール中…"
         case .upToDate: "最新版です"
+        case .undeterminable: "判定できません"
         case .available: "新しいバージョンがあります"
         case .checkFailed: "確認できませんでした"
         case .installFailed: "インストールに失敗しました"
@@ -38,6 +42,8 @@ enum UpdateState: Sendable, Equatable {
     var failureDetail: String? {
         switch self {
         case .checkFailed(let detail), .installFailed(_, let detail): detail
+        case .undeterminable:
+            "このビルドの元コミットが不明なため、最新かどうか判定できません。リリースページから最新版を入手してください。"
         default: nil
         }
     }
@@ -54,6 +60,8 @@ final class UpdateController {
     typealias FetchHandler = @Sendable () async -> Result<Updater.ReleaseInfo, Updater.UpdateError>
     typealias InstallHandler = @Sendable (Updater.ReleaseInfo) async -> Updater.UpdateError?
     typealias OfferPolicy = @Sendable (Updater.ReleaseInfo) -> Bool
+    /// ビルド元コミットが判明していて、更新の要否を判定できるか
+    typealias BuildIdentityPolicy = @Sendable () -> Bool
 
     /// 更新として提示する条件。資産の無いリリースは押しても失敗するだけなので提示しない
     nonisolated static let defaultOfferPolicy: OfferPolicy = { release in
@@ -66,6 +74,7 @@ final class UpdateController {
     private let fetchHandler: FetchHandler
     private let installHandler: InstallHandler
     private let shouldOffer: OfferPolicy
+    private let isBuildIdentified: BuildIdentityPolicy
 
     var automaticChecksEnabled: Bool {
         didSet {
@@ -77,11 +86,13 @@ final class UpdateController {
     init(
         fetch: @escaping FetchHandler = { await UpdateController.fetchLatest() },
         install: @escaping InstallHandler = { await UpdateController.performInstall($0) },
-        shouldOffer: @escaping OfferPolicy = UpdateController.defaultOfferPolicy
+        shouldOffer: @escaping OfferPolicy = UpdateController.defaultOfferPolicy,
+        isBuildIdentified: @escaping BuildIdentityPolicy = { Updater.currentCommit != nil }
     ) {
         self.fetchHandler = fetch
         self.installHandler = install
         self.shouldOffer = shouldOffer
+        self.isBuildIdentified = isBuildIdentified
         let defaults = UserDefaults.standard
         // 未設定なら有効。register ではなく明示的に既定値を決める
         if defaults.object(forKey: Self.automaticCheckDefaultsKey) == nil {
@@ -109,7 +120,12 @@ final class UpdateController {
         Task {
             switch await fetchHandler() {
             case .success(let release):
-                state = shouldOffer(release) ? .available(release) : .upToDate
+                if shouldOffer(release) {
+                    state = .available(release)
+                } else {
+                    // 判定できないだけの状態を「最新版です」と断言しない
+                    state = isBuildIdentified() ? .upToDate : .undeterminable
+                }
             case .failure(let error):
                 state = .checkFailed(Self.detail(of: error))
             }
@@ -169,6 +185,10 @@ final class UpdateController {
     nonisolated static var currentVersionLabel: String {
         let version =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        return "\(version) (\(Updater.shortCommit(Updater.currentCommit)))"
+        // 比較に使えない値でも表示はする(-dirty は素性を知るうえで有用な情報のため)
+        let commit = Updater.rawCommit.map { raw -> String in
+            raw.hasSuffix("-dirty") ? "\(Updater.shortCommit(raw))-dirty" : Updater.shortCommit(raw)
+        }
+        return "\(version) (\(commit ?? "unknown"))"
     }
 }

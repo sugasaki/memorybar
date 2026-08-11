@@ -75,11 +75,16 @@ enum Updater {
 
     // MARK: - 更新確認
 
-    /// このアプリのビルド元コミット(`make-app.sh` が Info.plist に埋め込む)
+    /// Info.plist に埋め込まれた生の値。`<sha>-dirty` のこともあるため表示専用
+    static var rawCommit: String? {
+        let value = Bundle.main.object(forInfoDictionaryKey: "TMSourceCommit") as? String
+        return (value?.isEmpty ?? true) ? nil : value
+    }
+
+    /// このアプリのビルド元コミット。比較に使えるSHAでなければ nil
+    /// (未コミットの変更を含むビルドは `-dirty` が付くためここで弾かれる)
     static var currentCommit: String? {
-        guard let value = Bundle.main.object(forInfoDictionaryKey: "TMSourceCommit") as? String
-        else { return nil }
-        return normalizedCommit(value)
+        rawCommit.flatMap(normalizedCommit)
     }
 
     static func fetchLatestRelease() throws -> ReleaseInfo {

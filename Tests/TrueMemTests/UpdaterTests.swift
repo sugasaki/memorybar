@@ -188,6 +188,50 @@ final class UpdaterTests: XCTestCase {
         XCTAssertFalse(installFailure.isBusy)
     }
 
+    @MainActor
+    func testビルド元コミットが不明なときは最新版ですと断言しない() {
+        // 判定できないだけの状態を .upToDate にすると、改変ビルドでも
+        // 「最新版です」と表示されてしまう
+        let latest = release(commit: "abcdef0123456789abcdef0123456789abcdef01")
+        let controller = UpdateController(
+            fetch: { .success(latest) }, install: { _ in nil },
+            shouldOffer: { _ in false }, isBuildIdentified: { false })
+
+        controller.check()
+        let expectation = XCTestExpectation()
+        Task { @MainActor in
+            for _ in 0..<200 where controller.state.isBusy {
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 3)
+
+        XCTAssertEqual(controller.state, .undeterminable)
+        XCTAssertEqual(controller.state.message, "判定できません")
+        XCTAssertNotNil(controller.state.failureDetail, "対処方法を示すべき")
+    }
+
+    @MainActor
+    func testビルド元コミットが判明していれば最新版と表示する() {
+        let latest = release(commit: "abcdef0123456789abcdef0123456789abcdef01")
+        let controller = UpdateController(
+            fetch: { .success(latest) }, install: { _ in nil },
+            shouldOffer: { _ in false }, isBuildIdentified: { true })
+
+        controller.check()
+        let expectation = XCTestExpectation()
+        Task { @MainActor in
+            for _ in 0..<200 where controller.state.isBusy {
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 3)
+
+        XCTAssertEqual(controller.state, .upToDate)
+    }
+
     func test資産の無いリリースは更新として提示しない() {
         // ボタンを出しても押した時点で失敗するだけなので提示条件から外す
         XCTAssertFalse(

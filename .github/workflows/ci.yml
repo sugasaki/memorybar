@@ -23,6 +23,12 @@ jobs:
           plutil -lint "dist/TrueMem.app/Contents/Info.plist"
           test "$(plutil -extract CFBundleShortVersionString raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "0.1.0"
           test "$(plutil -extract CFBundleVersion raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "1"
+          # クリーンな checkout なのに dirty 判定されたら、判定条件が壊れている
+          embedded="$(plutil -extract TMSourceCommit raw -o - "dist/TrueMem.app/Contents/Info.plist")"
+          echo "TMSourceCommit=$embedded"
+          case "$embedded" in
+            *-dirty) echo "クリーンな作業ツリーなのに -dirty が付いた"; exit 1 ;;
+          esac
           codesign --verify --deep --strict "dist/TrueMem.app"
           # --verify は未署名なら失敗するが署名の種別までは表明しないため、
           # ad-hoc 署名が実際に付いていることをアサートする

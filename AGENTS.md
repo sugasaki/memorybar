@@ -56,6 +56,7 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - **アプリにトークンを埋め込まない**。認証は利用者の `gh` CLI に委譲する（Sparkle は appcast 取得に認証が要るため private では使わない）
   - **GUI から起動した .app は PATH を継承しない**（Finder 起動時は `/usr/bin:/bin:/usr/sbin:/sbin` のみ）。`gh` などの外部コマンドは既定パスを明示的に探索する
   - 更新判定は `make-app.sh` が Info.plist へ埋め込む `TMSourceCommit` とリリースの `targetCommitish` の比較で行う。**判定不能なときは更新を促さない**（ビルド元コミットが不明、`targetCommitish` がブランチ名など）。判定不能なまま促すと同じビルドの更新を延々と繰り返す
+  - **未コミットの変更を含むビルドには `TMSourceCommit` へ `-dirty` を付ける**。HEAD をそのまま刻むと、実際には別物なのに「そのコミットのリリース版」を名乗ってしまう（実際にレビューで前提を誤らせた）。SHA として不正な値になるため更新判定からも自動的に外れる
   - GitHub API は**タグが既存だと `target_commitish` を無視する**ため、リリースは `edit` せず毎回タグごと作り直す。加えて差し替え直前に新バンドルの `TMSourceCommit` と `CFBundleIdentifier` を検証する（API の仕様に依存しない歯止め）
   - **差し替えは「退避 → 展開 → 削除」で置換する**。`ditto` は既存バンドルへマージするため、そのまま上書きすると旧版のファイルが残り署名シールが壊れる
   - 差し替えスクリプトは失敗時に必ず旧バンドルへロールバックし、アプリを再起動する（黙って消えるのが最悪の失敗）。ログは `~/Library/Logs/TrueMem-update.log`
