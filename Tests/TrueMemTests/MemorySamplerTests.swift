@@ -1,3 +1,4 @@
+import CMachSupport
 import Darwin
 import XCTest
 
@@ -50,5 +51,13 @@ final class MemorySamplerTests: XCTestCase {
     func testタイマーの許容誤差は更新間隔の10パーセント() {
         XCTAssertEqual(MemoryMonitor.refreshInterval, 2.0)
         XCTAssertEqual(MemoryMonitor.timerTolerance, 0.2)
+    }
+
+    /// 公式マクロ経由の要素数が構造体サイズと乖離したら検出する
+    /// (乖離したまま host_statistics64 を呼ぶと取得値が壊れる)
+    func testHOST_VM_INFO64_COUNTは構造体サイズと整合する() {
+        let sizeBased = mach_msg_type_number_t(
+            MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
+        XCTAssertEqual(truemem_host_vm_info64_count(), sizeBased)
     }
 }

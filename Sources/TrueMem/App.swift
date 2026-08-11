@@ -81,16 +81,18 @@ final class MemoryMonitor {
             queue: .main)
         resources.pressureSource = source
         source.setEventHandler { [weak self] in
+            // dataはイベントハンドラ内で読み取る。非同期ホップ後に読むと次のイベントで
+            // 上書き・クリアされ、プレッシャーを取りこぼして.unknownと誤表示しうる
+            let event = source.data
             Task { @MainActor [weak self] in
-                self?.handlePressureEvent()
+                self?.apply(pressure: MemoryPressure(dispatchEvent: event))
             }
         }
         source.resume()
     }
 
-    private func handlePressureEvent() {
-        guard let event = resources.pressureSource?.data else { return }
-        currentPressure = MemoryPressure(dispatchEvent: event)
+    private func apply(pressure: MemoryPressure) {
+        currentPressure = pressure
         refresh()
     }
 }
