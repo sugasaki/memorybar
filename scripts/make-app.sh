@@ -8,7 +8,8 @@ cd "$(dirname "$0")/.."
 APP_NAME="TrueMem"
 BUNDLE_ID="com.sugasaki.truemem"
 EXECUTABLE="truemem"
-APP_VERSION="${APP_VERSION:-0.1.0}"
+# バージョンは VERSION ファイルを唯一の出所にする(配布ビルドと手元ビルドで食い違わせない)
+APP_VERSION="${APP_VERSION:-$(cat VERSION 2>/dev/null || echo 0.0.0)}"
 APP_BUILD="${APP_BUILD:-1}"
 # 更新判定に使うソースコミット。CIでは GITHUB_SHA、ローカルでは git から取る
 APP_COMMIT="${APP_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
