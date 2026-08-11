@@ -48,7 +48,10 @@ struct MenuContentView: View {
             subRow("アプリメモリ", MemoryFormat.detail(snapshot.appMemory))
             subRow("確保済みメモリ", MemoryFormat.detail(snapshot.wired))
             subRow("圧縮", MemoryFormat.detail(snapshot.compressed))
+            // 内訳の合計が使用済みと一致するよう、どのカテゴリにも入らない分を示す
+            subRow("その他", MemoryFormat.detail(snapshot.other))
             row("キャッシュされたファイル", MemoryFormat.detail(snapshot.cachedFiles))
+            row("未使用", MemoryFormat.detail(snapshot.unused))
             row("使用済みスワップ", MemoryFormat.detail(snapshot.swapUsed))
             row("残容量", MemoryFormat.detail(snapshot.available), bold: true)
             HStack {
