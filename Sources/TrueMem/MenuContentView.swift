@@ -78,11 +78,14 @@ struct MenuContentView: View {
             HStack {
                 Button("更新を確認") { updateController.check(userInitiated: true) }
                     .font(.callout)
-                    .disabled(updateController.state == .checking)
+                    .disabled(updateController.state.isBusy)
+                Button("リリースページ") { updateController.openReleasePage() }
+                    .font(.callout)
                 Spacer()
                 Text(updateController.state.message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Toggle("起動時に自動で確認", isOn: updateAutomaticallyBinding)
                 .font(.callout)

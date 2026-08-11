@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write
 
+# 連続 push でリリースの削除・再作成が競合しないよう直列化する
+concurrency:
+  group: release-latest
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: macos-15
@@ -37,7 +42,7 @@ jobs:
       - name: zip に固める
         run: ditto -c -k --keepParent dist/TrueMem.app dist/TrueMem.zip
 
-      - name: latest リリースを公開
+      - name: latest リリースを作り直す
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -49,18 +54,26 @@ jobs:
           Apple Silicon と Intel の両方で動作する Universal ビルドです。ad-hoc 署名のため、初回起動時のみ手動での許可が必要です(README を参照)。
           EOF
 
+          # GitHub API は「タグが既存なら target_commitish を無視する」ため、
+          # edit では更新先コミットが古いまま残る。アプリの更新判定が
+          # 永久に一致しなくなるので、タグごと削除して作り直す
           if gh release view latest >/dev/null 2>&1; then
-            gh release edit latest \
-              --title "Latest build" \
-              --notes-file release-notes.md \
-              --target "${GITHUB_SHA}" \
-              --latest
-          else
-            gh release create latest \
-              --title "Latest build" \
-              --notes-file release-notes.md \
-              --target "${GITHUB_SHA}" \
-              --latest
+            gh release delete latest --yes --cleanup-tag
           fi
 
-          gh release upload latest dist/TrueMem.zip --clobber
+          # 資産を create と同時に添付し、「新しいメタデータ + 古い zip」を
+          # 掴む隙間を作らない
+          gh release create latest \
+            --title "Latest build" \
+            --notes-file release-notes.md \
+            --target "${GITHUB_SHA}" \
+            --latest \
+            dist/TrueMem.zip
+
+      - name: リリースが今回のコミットを指していることを確認
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          target=$(gh release view latest --json targetCommitish --jq .targetCommitish)
+          echo "target=$target"
+          test "$target" = "${{ github.sha }}"

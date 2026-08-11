@@ -5,6 +5,7 @@ import SwiftUI
 enum UpdateState: Sendable, Equatable {
     case idle
     case checking
+    case installing
     case upToDate
     case available(Updater.ReleaseInfo)
     case failed(String)
@@ -13,19 +14,27 @@ enum UpdateState: Sendable, Equatable {
         switch self {
         case .idle: ""
         case .checking: "確認中…"
+        case .installing: "インストール中…"
         case .upToDate: "最新版です"
         case .available: "新しいバージョンがあります"
         case .failed(let reason): reason
         }
     }
+
+    /// 実行中は操作を受け付けない
+    var isBusy: Bool { self == .checking || self == .installing }
 }
 
 @Observable
 @MainActor
 final class UpdateController {
+    /// アプリ起動時の確認を確実に一度だけ行うため、単一のインスタンスを共有する
+    static let shared = UpdateController()
+
     static let automaticCheckDefaultsKey = "automaticUpdateChecks"
 
     private(set) var state: UpdateState = .idle
+    private var hasCheckedAtLaunch = false
 
     var automaticChecksEnabled: Bool {
         didSet {
@@ -46,16 +55,17 @@ final class UpdateController {
 
     /// 起動時の自動確認。無効化されている場合と、更新が無い場合は何も表示しない
     func checkAtLaunchIfEnabled() {
+        guard !hasCheckedAtLaunch else { return }
+        hasCheckedAtLaunch = true
         guard automaticChecksEnabled else { return }
         check(userInitiated: false)
     }
 
     func check(userInitiated: Bool) {
-        guard state != .checking else { return }
+        guard !state.isBusy else { return }
         state = .checking
         Task {
-            let result = await Self.fetchLatest()
-            switch result {
+            switch await Self.fetchLatest() {
             case .success(let release):
                 if Updater.isUpdateAvailable(release) {
                     state = .available(release)
@@ -72,13 +82,14 @@ final class UpdateController {
                 state = .failed(error.errorDescription ?? "更新を確認できませんでした")
                 // 自動確認の失敗でダイアログを出すと、gh 未導入の環境で毎回邪魔になる
                 if userInitiated {
-                    Self.showError(
-                        title: "更新を確認できませんでした",
-                        message: [error.errorDescription, error.recoverySuggestion]
-                            .compactMap { $0 }.joined(separator: "\n\n"))
+                    Self.showError(title: "更新を確認できませんでした", message: Self.detail(of: error))
                 }
             }
         }
+    }
+
+    func openReleasePage() {
+        NSWorkspace.shared.open(Updater.releaseURL)
     }
 
     private func promptToInstall(_ release: Updater.ReleaseInfo) {
@@ -94,24 +105,25 @@ final class UpdateController {
         alert.addButton(withTitle: "インストール")
         alert.addButton(withTitle: "後で")
         NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            state = .idle
+            return
+        }
+        install(release)
+    }
 
-        do {
-            // 成功時はプロセスが終了するため、以降は実行されない
-            try Updater.downloadAndInstall(release)
-        } catch let error as Updater.UpdateError {
-            state = .failed(error.errorDescription ?? "インストールに失敗しました")
-            Self.showError(
-                title: "インストールに失敗しました",
-                message: [error.errorDescription, error.recoverySuggestion]
-                    .compactMap { $0 }.joined(separator: "\n\n"))
-        } catch {
-            state = .failed(error.localizedDescription)
-            Self.showError(title: "インストールに失敗しました", message: error.localizedDescription)
+    private func install(_ release: Updater.ReleaseInfo) {
+        state = .installing
+        Task {
+            // 成功するとプロセスが終了するため、戻ってくるのは失敗したときだけ
+            if let error = await Self.performInstall(release) {
+                state = .failed(error.errorDescription ?? "インストールに失敗しました")
+                Self.showError(title: "インストールに失敗しました", message: Self.detail(of: error))
+            }
         }
     }
 
-    /// gh の実行はブロッキングなので、メインスレッドを止めないよう別スレッドで行う
+    /// gh の実行とダウンロードはブロッキングなので、メインスレッドを止めないよう別スレッドで行う
     private static func fetchLatest() async -> Result<Updater.ReleaseInfo, Updater.UpdateError> {
         await Task.detached {
             do {
@@ -122,6 +134,26 @@ final class UpdateController {
                 return .failure(Updater.UpdateError(error.localizedDescription))
             }
         }.value
+    }
+
+    private static func performInstall(_ release: Updater.ReleaseInfo) async -> Updater.UpdateError?
+    {
+        await Task.detached {
+            do {
+                try Updater.downloadAndInstall(release)
+                return nil
+            } catch let error as Updater.UpdateError {
+                return error
+            } catch {
+                return Updater.UpdateError(error.localizedDescription)
+            }
+        }.value
+    }
+
+    private static func detail(of error: Updater.UpdateError) -> String {
+        [error.errorDescription, error.recoverySuggestion]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
     }
 
     /// Bundle の読み取りのみで状態を持たないため、CLI(非 MainActor)からも参照できる

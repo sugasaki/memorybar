@@ -59,11 +59,15 @@ brew install gh
 gh auth login
 ```
 
-更新確認だけを実行して結果を確認するには:
+更新確認だけを実行して結果を確認するには(インストールはしない):
 
 ```sh
-swift run truemem --check-update
+dist/TrueMem.app/Contents/MacOS/truemem --check-update
 ```
+
+`swift run truemem --check-update` でも実行できるが、その場合は `.app` ではないためビルド元コミットが不明になり、`gh` の疎通確認にしかならない。更新判定まで確認するには上記のように `.app` 内の実行ファイルを直接起動する。
+
+更新の適用時のログは `~/Library/Logs/TrueMem-update.log` に残る。
 
 ## ビルドと実行
 

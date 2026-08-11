@@ -37,6 +37,24 @@ final class UpdaterTests: XCTestCase {
         XCTAssertFalse(Updater.isSameCommit("", ""))
     }
 
+    func test短すぎるSHAは比較対象にしない() {
+        // 最小長がないと、1文字の前方一致だけで同一と誤判定してしまう
+        XCTAssertNil(Updater.normalizedCommit("abcde"))
+        XCTAssertFalse(Updater.isSameCommit("a", "abcdef0123456"))
+    }
+
+    func test16進でない文字列はコミットとして扱わない() {
+        // targetCommitish はブランチ名を返すことがある
+        XCTAssertNil(Updater.normalizedCommit("main"))
+        XCTAssertNil(Updater.normalizedCommit("feature/19-release"))
+        XCTAssertFalse(Updater.isSameCommit("main", "main"))
+    }
+
+    func testリリースがブランチ名を指す場合は更新を促さない() {
+        // 判定不能なまま更新を促すと、同じビルドの更新を延々と繰り返すことになる
+        XCTAssertFalse(Updater.isUpdateAvailable(release(commit: "main")))
+    }
+
     func testビルド元コミットが不明なら更新を促さない() {
         // テスト実行時は .app ではないため TMSourceCommit を持たない。
         // 不明なまま更新を促すと、毎回更新ダイアログが出てしまう

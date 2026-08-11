@@ -131,7 +131,7 @@ final class MemoryMonitor {
 struct TrueMemApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var monitor = MemoryMonitor()
-    @State private var updateController = UpdateController()
+    @State private var updateController = UpdateController.shared
     @AppStorage("displayMode") private var displayModeRaw = DisplayMode.default.rawValue
 
     private var displayMode: DisplayMode {
@@ -141,7 +141,6 @@ struct TrueMemApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuContentView(monitor: monitor, updateController: updateController)
-                .task { updateController.checkAtLaunchIfEnabled() }
         } label: {
             if let snapshot = monitor.snapshot {
                 Label(displayMode.menuBarText(for: snapshot), systemImage: "memorychip")
@@ -157,5 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // swift runなど.appバンドル外から起動してもDockに出さない
         NSApp.setActivationPolicy(.accessory)
+        // メニューのコンテンツは初回クリックまで生成されないため、
+        // 起動時の確認はビューの task ではなくここで行う
+        UpdateController.shared.checkAtLaunchIfEnabled()
     }
 }
