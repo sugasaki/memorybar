@@ -4,6 +4,7 @@ import SwiftUI
 /// メニューバーアイコンをクリックしたときの詳細パネル
 struct MenuContentView: View {
     let monitor: MemoryMonitor
+    let updateController: UpdateController
     @AppStorage("displayMode") private var displayModeRaw = DisplayMode.default.rawValue
 
     var body: some View {
@@ -18,6 +19,8 @@ struct MenuContentView: View {
             }
             Divider()
             settings
+            Divider()
+            updates
             Divider()
             footer
         }
@@ -70,9 +73,35 @@ struct MenuContentView: View {
         .font(.callout)
     }
 
+    private var updates: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button("更新を確認") { updateController.check(userInitiated: true) }
+                    .font(.callout)
+                    .disabled(updateController.state.isBusy)
+                Button("リリースページ") { updateController.openReleasePage() }
+                    .font(.callout)
+                Spacer()
+                Text(updateController.state.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Toggle("起動時に自動で確認", isOn: updateAutomaticallyBinding)
+                .font(.callout)
+                .toggleStyle(.checkbox)
+        }
+    }
+
+    private var updateAutomaticallyBinding: Binding<Bool> {
+        Binding(
+            get: { updateController.automaticChecksEnabled },
+            set: { updateController.automaticChecksEnabled = $0 })
+    }
+
     private var footer: some View {
         HStack {
-            Text("約2秒ごとに更新")
+            Text("v\(UpdateController.currentVersionLabel)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()

@@ -10,6 +10,10 @@ BUNDLE_ID="com.sugasaki.truemem"
 EXECUTABLE="truemem"
 APP_VERSION="${APP_VERSION:-0.1.0}"
 APP_BUILD="${APP_BUILD:-1}"
+# 更新判定に使うソースコミット。CIでは GITHUB_SHA、ローカルでは git から取る
+APP_COMMIT="${APP_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+# ローカルは自アーキテクチャのみ、配布用は UNIVERSAL=1 で arm64 + x86_64
+UNIVERSAL="${UNIVERSAL:-0}"
 
 validate_plist_value() {
     local value="$1"
@@ -24,9 +28,15 @@ validate_plist_value() {
 
 validate_plist_value "$APP_VERSION" "APP_VERSION"
 validate_plist_value "$APP_BUILD" "APP_BUILD"
+validate_plist_value "$APP_COMMIT" "APP_COMMIT"
 
-swift build -c release
-BIN_DIR="$(swift build -c release --show-bin-path)"
+BUILD_ARGS=(-c release)
+if [ "$UNIVERSAL" = "1" ]; then
+    BUILD_ARGS+=(--arch arm64 --arch x86_64)
+fi
+
+swift build "${BUILD_ARGS[@]}"
+BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 
 APP_DIR="dist/$APP_NAME.app"
 rm -rf "$APP_DIR"
@@ -53,6 +63,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 	<string>$APP_VERSION</string>
 	<key>CFBundleVersion</key>
 	<string>$APP_BUILD</string>
+	<key>TMSourceCommit</key>
+	<string>$APP_COMMIT</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -67,6 +79,6 @@ EOF
 codesign --force --sign - "$APP_DIR"
 
 echo ""
-echo "生成完了: $APP_DIR (version=$APP_VERSION, build=$APP_BUILD)"
+echo "生成完了: $APP_DIR (version=$APP_VERSION, build=$APP_BUILD, commit=${APP_COMMIT:0:7})"
 echo "インストール: cp -R \"$APP_DIR\" /Applications/"
 echo "ログイン時に自動起動するには: システム設定 > 一般 > ログイン項目 に追加"

@@ -34,6 +34,8 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - `MemorySnapshot.swift` — 計測値から使用量・残量を導出する純粋ロジック
   - `DisplayMode.swift` — メニューバー表示モードとフォーマット
   - `MenuContentView.swift` — クリック時の詳細パネル
+  - `Updater.swift` — GitHub Releases からの更新確認・適用（`gh` CLI に認証を委譲）
+  - `UpdateController.swift` — 更新の進行状態と確認ダイアログ
 - `Sources/CMachSupport/` — Swift へ import できない Mach 定数を公開する最小 C shim
 - `Tests/TrueMemTests/` — ユニットテスト（純粋ロジック + 実機サンプリング・Mach ポートリーク回帰）
 - `scripts/make-app.sh` — .app バンドル生成スクリプト
@@ -47,6 +49,14 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - `DispatchSource` の `data` は**必ずイベントハンドラ内で読む**。非同期ホップ後に読むと上書き・クリアされ、正常なのに「取得不能」と誤表示する
   - **取得できなかった値を正常値（`.normal` や 0）に置換しない**。「分からないのに正常と表示する」より「分からないと表示する」方を選ぶ
 - 外部ライブラリを追加しない（追加が必要と考える場合は利用者に確認）
+- **配布と自動アップデート**: リポジトリは private のまま、`main` への push で GitHub Actions が Universal ビルドを `latest` リリースへ公開する（`.github/workflows/release.yml`）
+  - **アプリにトークンを埋め込まない**。認証は利用者の `gh` CLI に委譲する（Sparkle は appcast 取得に認証が要るため private では使わない）
+  - **GUI から起動した .app は PATH を継承しない**（Finder 起動時は `/usr/bin:/bin:/usr/sbin:/sbin` のみ）。`gh` などの外部コマンドは既定パスを明示的に探索する
+  - 更新判定は `make-app.sh` が Info.plist へ埋め込む `TMSourceCommit` とリリースの `targetCommitish` の比較で行う。**判定不能なときは更新を促さない**（ビルド元コミットが不明、`targetCommitish` がブランチ名など）。判定不能なまま促すと同じビルドの更新を延々と繰り返す
+  - GitHub API は**タグが既存だと `target_commitish` を無視する**ため、リリースは `edit` せず毎回タグごと作り直す。加えて差し替え直前に新バンドルの `TMSourceCommit` と `CFBundleIdentifier` を検証する（API の仕様に依存しない歯止め）
+  - **差し替えは「退避 → 展開 → 削除」で置換する**。`ditto` は既存バンドルへマージするため、そのまま上書きすると旧版のファイルが残り署名シールが壊れる
+  - 差し替えスクリプトは失敗時に必ず旧バンドルへロールバックし、アプリを再起動する（黙って消えるのが最悪の失敗）。ログは `~/Library/Logs/TrueMem-update.log`
+  - 動作確認は `dist/TrueMem.app/Contents/MacOS/truemem --check-update`（インストールはしない）。`swift run` では `.app` でないため更新判定まで確認できない
 
 ## 開発規約
 

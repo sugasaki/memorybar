@@ -22,6 +22,53 @@ TrueMemはアクティビティモニタと**同じデータソース(Mach API `
 - クリックで詳細パネル: アプリメモリ / 確保済み / 圧縮 / キャッシュされたファイル / 使用済みスワップ / メモリプレッシャー
 - ネイティブSwift + SwiftUI製。アプリ自体のメモリ消費は最小限、外部依存なし
 
+## ダウンロード
+
+最新版は次のリンクからダウンロードできる(GitHubにログインした状態で開く。privateリポジトリのため):
+
+**[TrueMem.zip](https://github.com/sugasaki/truemem/releases/latest/download/TrueMem.zip)**
+
+Apple SiliconとIntelの両方で動くUniversalビルド。`main`への変更ごとにGitHub Actionsが自動更新する。
+
+展開して `TrueMem.app` を `/Applications` に置く。ログイン時に自動起動するには「システム設定 > 一般 > ログイン項目」に追加する。
+
+### 初回起動時の許可(1回だけ必要)
+
+ad-hoc署名のため、**ブラウザでダウンロードした場合のみ**macOSが初回起動をブロックする。次のいずれかで許可する:
+
+- `TrueMem.app` を右クリック →「開く」→ ダイアログで「開く」
+- または「システム設定 > プライバシーとセキュリティ」を開き、下部の「"TrueMem"は開発元を確認できないため…」の横の「このまま開く」
+- またはターミナルで検疫属性を削除する:
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/TrueMem.app
+  ```
+
+**2回目以降は不要**。アプリ内の自動アップデートは `gh` 経由でダウンロードするため検疫属性が付かず、警告は出ない。
+
+## 自動アップデート
+
+アプリが起動時に最新リリースを確認し、更新があれば確認ダイアログを表示する。承認するとダウンロード・入れ替え・再起動まで自動で行う。
+
+- メニューの「更新を確認」で手動確認もできる
+- 「起動時に自動で確認」のチェックを外すと自動確認を止められる
+
+privateリポジトリのため認証が必要だが、**アプリはトークンを一切保持しない**。認証済みの [GitHub CLI (`gh`)](https://cli.github.com/) に委譲する仕組みなので、次が前提になる:
+
+```sh
+brew install gh
+gh auth login
+```
+
+更新確認だけを実行して結果を確認するには(インストールはしない):
+
+```sh
+dist/TrueMem.app/Contents/MacOS/truemem --check-update
+```
+
+`swift run truemem --check-update` でも実行できるが、その場合は `.app` ではないためビルド元コミットが不明になり、`gh` の疎通確認にしかならない。更新判定まで確認するには上記のように `.app` 内の実行ファイルを直接起動する。
+
+更新の適用時のログは `~/Library/Logs/TrueMem-update.log` に残る。
+
 ## ビルドと実行
 
 要件: macOS 14以降、Xcode(またはSwift 6 toolchain)
@@ -39,15 +86,14 @@ scripts/make-app.sh
 cp -R dist/TrueMem.app /Applications/
 ```
 
-バージョンとビルド番号はスクリプトを編集せず指定できる:
+バージョン・ビルド番号・Universalビルドはスクリプトを編集せず指定できる:
 
 ```sh
-APP_VERSION=0.2.0 APP_BUILD=42 scripts/make-app.sh
+APP_VERSION=0.4.0 APP_BUILD=42 scripts/make-app.sh   # 自アーキテクチャのみ(高速)
+UNIVERSAL=1 scripts/make-app.sh                       # arm64 + x86_64(配布用)
 ```
 
 生成物はad-hoc署名で、同じMacでのローカル利用を想定している。第三者へ外部配布する場合は、Developer ID Application証明書での署名とAppleのnotarizationを別途行うこと。
-
-ログイン時に自動起動するには「システム設定 > 一般 > ログイン項目」に追加する。
 
 ### 値の検証
 
