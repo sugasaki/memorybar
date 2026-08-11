@@ -5,7 +5,7 @@ import SwiftUI
 struct MenuContentView: View {
     let monitor: MemoryMonitor
     let updateController: UpdateController
-    @AppStorage("displayMode") private var displayModeRaw = DisplayMode.default.rawValue
+    @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -74,6 +74,8 @@ struct MenuContentView: View {
             }
         }
         .font(.callout)
+        // メニューバーの文字列は更新時にしか作られないため、切り替えを即座に反映させる
+        .onChange(of: displayModeRaw) { monitor.refreshMenuBarText() }
     }
 
     private var updates: some View {

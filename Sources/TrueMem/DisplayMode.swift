@@ -7,6 +7,8 @@ enum DisplayMode: String, CaseIterable, Identifiable, Sendable {
     case usedPercent
 
     static let `default`: DisplayMode = .freeGB
+    /// UserDefaults のキー。文字列リテラルを散らさない
+    static let defaultsKey = "displayMode"
 
     var id: String { rawValue }
 
