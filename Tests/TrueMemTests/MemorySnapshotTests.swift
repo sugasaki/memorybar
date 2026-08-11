@@ -41,7 +41,7 @@ final class MemorySnapshotTests: XCTestCase {
 
     func test残容量は物理メモリから使用済みを引いた値になる() {
         let snapshot = makeSnapshot()
-        XCTAssertEqual(snapshot.free, totalBytes - snapshot.used)
+        XCTAssertEqual(snapshot.available, totalBytes - snapshot.used)
     }
 
     func testキャッシュはexternalとpurgeableの合計になる() {
@@ -56,7 +56,7 @@ final class MemorySnapshotTests: XCTestCase {
 
     func test使用済みが物理メモリを上回っても残容量は負にならない() {
         let snapshot = makeSnapshot(wiredPages: 10_000_000)
-        XCTAssertEqual(snapshot.free, 0)
+        XCTAssertEqual(snapshot.available, 0)
         XCTAssertEqual(snapshot.usedFraction, 1.0)
     }
 
@@ -79,6 +79,21 @@ final class MemorySnapshotTests: XCTestCase {
         XCTAssertEqual(MemoryPressure(rawSysctlLevel: 1), .normal)
         XCTAssertEqual(MemoryPressure(rawSysctlLevel: 2), .warning)
         XCTAssertEqual(MemoryPressure(rawSysctlLevel: 4), .critical)
-        XCTAssertEqual(MemoryPressure(rawSysctlLevel: 99), .normal)
+    }
+
+    func test未知のメモリプレッシャー値は正常扱いせずunknownになる() {
+        XCTAssertEqual(MemoryPressure(rawSysctlLevel: 0), .unknown)
+        XCTAssertEqual(MemoryPressure(rawSysctlLevel: 3), .unknown)
+        XCTAssertEqual(MemoryPressure(rawSysctlLevel: 99), .unknown)
+        XCTAssertEqual(MemoryPressure.unknown.label, "取得不能")
+    }
+
+    func testスワップ取得失敗はゼロに置換されずnilのまま保持される() {
+        let snapshot = MemorySnapshot(
+            totalBytes: totalBytes, pageSize: pageSize,
+            internalPages: 100, purgeablePages: 0, wiredPages: 100,
+            compressedPages: 0, externalPages: 0, swapUsedBytes: nil,
+            pressure: .unknown)
+        XCTAssertNil(snapshot.swapUsed)
     }
 }
