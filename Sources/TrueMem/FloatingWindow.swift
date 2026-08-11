@@ -12,34 +12,39 @@ struct FloatingContentView: View {
     /// この高さを下回ったら内訳を省く(要約だけでも読めるようにする)
     private static let breakdownMinHeight: CGFloat = 210
     /// 内訳に加えてアプリ一覧まで出すのに必要な高さ。
-    /// 既定サイズがこれを下回ると一覧が一度も出ないため、テストで関係を固定している
-    static let topAppsMinHeight: CGFloat = 420
+    /// 既定サイズがこれを下回ると一覧が一度も出ないため、テストで関係を固定している。
+    /// 内訳7行 + 一覧6行がちょうど収まる高さに合わせてある
+    static let topAppsMinHeight: CGFloat = 470
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(alignment: .leading, spacing: 10) {
-                if let snapshot = monitor.snapshot {
-                    header(snapshot)
-                    summary(snapshot)
-                    CompositionBar(snapshot: snapshot)
-                    if geometry.size.height >= Self.breakdownMinHeight {
-                        Divider()
-                        breakdown(snapshot)
+            // 高さに応じて内容を省いても、端数の高さでは末尾が切れる。
+            // 収まらないぶんはスクロールで読めるようにする
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let snapshot = monitor.snapshot {
+                        header(snapshot)
+                        summary(snapshot)
+                        CompositionBar(snapshot: snapshot)
+                        if geometry.size.height >= Self.breakdownMinHeight {
+                            Divider()
+                            breakdown(snapshot)
+                        }
+                        if geometry.size.height >= Self.topAppsMinHeight, !monitor.topApps.isEmpty {
+                            Divider()
+                            TopAppsView(apps: monitor.topApps)
+                        }
+                    } else {
+                        Text("計測に失敗しました")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
-                    if geometry.size.height >= Self.topAppsMinHeight, !monitor.topApps.isEmpty {
-                        Divider()
-                        TopAppsView(apps: monitor.topApps)
-                    }
-                    Spacer(minLength: 0)
-                } else {
-                    Text("計測に失敗しました")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
                 }
+                .padding(14)
+                .frame(width: geometry.size.width, alignment: .topLeading)
             }
-            .padding(14)
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .background(.regularMaterial)
         // 背景と同化して見失わないよう輪郭を明示する

@@ -9,7 +9,26 @@ struct MenuContentView: View {
     @State private var floatingVisible = false
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
+    /// 画面に対して残す余白。メニューバーと画面端に食い込ませない
+    private static let screenMargin: CGFloat = 120
+
+    /// パネルの高さの上限。アプリ一覧や更新の詳細が加わると、
+    /// 短い画面や拡大表示では画面高を超えて末尾が操作できなくなる
+    private var maxPanelHeight: CGFloat {
+        let usable = NSScreen.main?.visibleFrame.height ?? 800
+        return max(320, usable - Self.screenMargin)
+    }
+
     var body: some View {
+        ScrollView(.vertical) {
+            content
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: 280)
+        .frame(maxHeight: maxPanelHeight)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let snapshot = monitor.snapshot {
                 header(snapshot)
@@ -32,7 +51,6 @@ struct MenuContentView: View {
             footer
         }
         .padding(12)
-        .frame(width: 280)
     }
 
     private func header(_ snapshot: MemorySnapshot) -> some View {
