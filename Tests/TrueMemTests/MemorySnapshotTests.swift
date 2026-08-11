@@ -1,3 +1,4 @@
+import Dispatch
 import XCTest
 
 @testable import TrueMem
@@ -12,7 +13,7 @@ final class MemorySnapshotTests: XCTestCase {
         wiredPages: UInt64 = 100_000,
         compressedPages: UInt64 = 80_000,
         externalPages: UInt64 = 150_000,
-        swapUsedBytes: UInt64 = 0,
+        swapUsedBytes: UInt64? = 0,
         pressure: MemoryPressure = .normal
     ) -> MemorySnapshot {
         MemorySnapshot(
@@ -88,12 +89,16 @@ final class MemorySnapshotTests: XCTestCase {
         XCTAssertEqual(MemoryPressure.unknown.label, "取得不能")
     }
 
+    func testDispatchSourceイベントをメモリプレッシャーへ変換できる() {
+        XCTAssertEqual(MemoryPressure(dispatchEvent: .normal), .normal)
+        XCTAssertEqual(MemoryPressure(dispatchEvent: .warning), .warning)
+        XCTAssertEqual(MemoryPressure(dispatchEvent: .critical), .critical)
+        XCTAssertEqual(MemoryPressure(dispatchEvent: []), .unknown)
+        XCTAssertEqual(MemoryPressure(dispatchEvent: [.normal, .critical]), .critical)
+    }
+
     func testスワップ取得失敗はゼロに置換されずnilのまま保持される() {
-        let snapshot = MemorySnapshot(
-            totalBytes: totalBytes, pageSize: pageSize,
-            internalPages: 100, purgeablePages: 0, wiredPages: 100,
-            compressedPages: 0, externalPages: 0, swapUsedBytes: nil,
-            pressure: .unknown)
+        let snapshot = makeSnapshot(swapUsedBytes: nil, pressure: .unknown)
         XCTAssertNil(snapshot.swapUsed)
     }
 }

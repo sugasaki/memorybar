@@ -9,15 +9,18 @@ jobs:
   check:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      # 公式Actionはセキュリティ修正を取り込めるメジャータグで追従する
+      - uses: actions/checkout@v6
       - run: swift --version
       - run: swift build
-      # テストには実機サンプリング検証と Mach ポートリークの回帰テストを含む
+      # テストには実機サンプリング検証とMachポートリークの回帰テストを含む
       - run: swift test
       - name: 実機サンプリングのスモークテスト
         run: swift run truemem --print
-      - name: .app バンドル生成と検証
+      - name: .appバンドル生成と検証
         run: |
-          scripts/make-app.sh
+          APP_VERSION=0.1.0 APP_BUILD=1 scripts/make-app.sh
           plutil -lint "dist/TrueMem.app/Contents/Info.plist"
-          codesign --verify --strict "dist/TrueMem.app"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "0.1.0"
+          test "$(plutil -extract CFBundleVersion raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "1"
+          codesign --verify --deep --strict "dist/TrueMem.app"

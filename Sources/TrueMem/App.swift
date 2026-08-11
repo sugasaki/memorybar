@@ -1,10 +1,11 @@
 import AppKit
+import Dispatch
 import SwiftUI
 
 @main
 enum Main {
     static func main() {
-        // 検証用: --print で1サンプルを標準出力に出して終了する
+        // 検証用: --printで1サンプルを標準出力に出して終了する
         if CommandLine.arguments.contains("--print") {
             printSample()
             return
@@ -37,21 +38,54 @@ enum Main {
 @Observable
 @MainActor
 final class MemoryMonitor {
+    static let refreshInterval: TimeInterval = 2.0
+    static let timerTolerance: TimeInterval = 0.2
+
     private(set) var snapshot: MemorySnapshot?
+    private var currentPressure = MemorySampler.initialPressure()
+    private var pressureSource: DispatchSourceMemoryPressure?
     private var timer: Timer?
 
     init() {
+        startPressureMonitoring()
         refresh()
-        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+
+        let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refresh() }
         }
-        // メニュー表示中(イベントトラッキング中)も更新が止まらないよう common モードで回す
+        // OSが他の処理とまとめて起床できるよう、更新間隔の10%を許容する
+        timer.tolerance = Self.timerTolerance
+        // メニュー表示中(イベントトラッキング中)も更新が止まらないようcommonモードで回す
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
 
+    deinit {
+        timer?.invalidate()
+        pressureSource?.cancel()
+    }
+
     func refresh() {
-        snapshot = MemorySampler.sample()
+        snapshot = MemorySampler.sample(pressure: currentPressure)
+    }
+
+    private func startPressureMonitoring() {
+        let source = DispatchSource.makeMemoryPressureSource(
+            eventMask: [.normal, .warning, .critical],
+            queue: .main)
+        pressureSource = source
+        source.setEventHandler { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handlePressureEvent()
+            }
+        }
+        source.resume()
+    }
+
+    private func handlePressureEvent() {
+        guard let event = pressureSource?.data else { return }
+        currentPressure = MemoryPressure(dispatchEvent: event)
+        refresh()
     }
 }
 
@@ -80,7 +114,7 @@ struct TrueMemApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // swift run など .app バンドル外から起動しても Dock に出さない
+        // swift runなど.appバンドル外から起動してもDockに出さない
         NSApp.setActivationPolicy(.accessory)
     }
 }
