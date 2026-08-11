@@ -30,6 +30,11 @@ enum Main {
             printSample()
             return
         }
+        // 検証用: 使用量の多いアプリを標準出力に出す
+        if CommandLine.arguments.contains("--apps") {
+            printTopApps()
+            return
+        }
         // 検証用: 更新確認だけを行って結果を標準出力に出す(インストールはしない)
         if CommandLine.arguments.contains("--check-update") {
             printUpdateStatus()
@@ -85,6 +90,21 @@ enum Main {
         return NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
             .map(\.processIdentifier)
             .first { $0 != selfPID }
+    }
+
+    private static func printTopApps() {
+        let apps = ProcessSampler.topApps()
+        guard !apps.isEmpty else {
+            FileHandle.standardError.write(Data("プロセス情報を取得できませんでした\n".utf8))
+            exit(1)
+        }
+        // %s は日本語を含む文字列で空欄になるため、自前で桁を揃える
+        for app in apps {
+            let name = app.name.padding(toLength: max(app.name.count, 24), withPad: " ", startingAt: 0)
+            print("\(name)  \(MemoryFormat.detail(app.footprint))  (\(app.processCount) プロセス)")
+        }
+        let total = apps.reduce(UInt64(0)) { $0 + $1.footprint }
+        print("合計: \(MemoryFormat.detail(total))  ※圧縮・スワップ済みを含むため物理メモリを超えうる")
     }
 
     private static func printUpdateStatus() {
@@ -150,6 +170,11 @@ final class MemoryMonitor {
     /// メニューバーに出す文字列。値が動いても表示が変わらないティックでは更新しないことで、
     /// 再描画を省く(1秒間隔では約半分のティックが該当する)
     private(set) var menuBarText: String = "--"
+    /// 使用量の多いアプリ。全プロセスの走査に約9msかかるため、毎ティックではなく間引いて更新する
+    private(set) var topApps: [AppMemoryUsage] = []
+    /// アプリ一覧を更新する間隔(秒)。順位はそう頻繁に入れ替わらない
+    static let appsRefreshInterval: TimeInterval = 5.0
+    private var ticksSinceAppsRefresh = 0
     private var currentPressure = MemorySampler.initialPressure()
     private let resources = MemoryMonitorResources()
 
@@ -167,8 +192,19 @@ final class MemoryMonitor {
         resources.timer = timer
     }
 
+    /// 何ティックごとにアプリ一覧を更新するか
+    private var appsRefreshEveryTicks: Int {
+        max(1, Int((Self.appsRefreshInterval / Self.refreshInterval).rounded()))
+    }
+
     func refresh() {
         snapshot = MemorySampler.sample(pressure: currentPressure)
+        if topApps.isEmpty || ticksSinceAppsRefresh >= appsRefreshEveryTicks - 1 {
+            topApps = ProcessSampler.topApps()
+            ticksSinceAppsRefresh = 0
+        } else {
+            ticksSinceAppsRefresh += 1
+        }
         refreshMenuBarText()
     }
 

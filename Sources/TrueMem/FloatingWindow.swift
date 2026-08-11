@@ -11,6 +11,8 @@ struct FloatingContentView: View {
 
     /// この高さを下回ったら内訳を省く(要約だけでも読めるようにする)
     private static let breakdownMinHeight: CGFloat = 210
+    /// 内訳に加えてアプリ一覧まで出すのに必要な高さ
+    private static let topAppsMinHeight: CGFloat = 420
 
     var body: some View {
         GeometryReader { geometry in
@@ -22,6 +24,10 @@ struct FloatingContentView: View {
                     if geometry.size.height >= Self.breakdownMinHeight {
                         Divider()
                         breakdown(snapshot)
+                    }
+                    if geometry.size.height >= Self.topAppsMinHeight, !monitor.topApps.isEmpty {
+                        Divider()
+                        TopAppsView(apps: monitor.topApps)
                     }
                     Spacer(minLength: 0)
                 } else {

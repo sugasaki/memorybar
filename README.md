@@ -5,6 +5,7 @@ macOSのメニューバーに常駐し、メモリの残容量・使用量をア
 - メニューバーに常時表示(約1秒間隔で更新)。表示は **残容量GB / 使用量GB / 使用率%** から選べる
 - フローティングウィンドウで常時表示できる(オン/オフ切替、リサイズ可能、内訳表示、全スペースに追従)
 - クリックで詳細パネル: アプリメモリ / 確保済み / 圧縮 / その他 / キャッシュされたファイル / 未使用 / 使用済みスワップ / メモリプレッシャー
+- 使用量の多いアプリを表示(何を終了すれば楽になるかが分かる)
 - アプリ内から更新できる(同意なしにはインストールしない)
 - Swift + SwiftUI製、外部依存なし。実測でCPU約1%、常駐時のメモリ約70MB
 
@@ -92,6 +93,7 @@ cp -R dist/TrueMem.app /Applications/
 
 ```sh
 dist/TrueMem.app/Contents/MacOS/truemem --print           # 1回分のサンプルを出力
+dist/TrueMem.app/Contents/MacOS/truemem --apps            # 使用量の多いアプリを出力
 dist/TrueMem.app/Contents/MacOS/truemem --check-update    # 更新確認のみ
 /Applications/TrueMem.app/Contents/MacOS/truemem --install-update   # 実際に適用
 ```
@@ -101,3 +103,11 @@ dist/TrueMem.app/Contents/MacOS/truemem --check-update    # 更新確認のみ
 ## 開発
 
 開発規約と実装上の注意は [AGENTS.md](AGENTS.md) を参照([agent-project-template](https://github.com/sugasaki/agent-project-template)ベース)。
+
+## 使用量の多いアプリについて
+
+各アプリの値は、そのアプリに属するプロセスの `phys_footprint` の合計です。これは**アクティビティモニタの「メモリ」列と同じ指標**で、同時刻の比較で一致することを確認しています。ヘルパープロセスは親アプリにまとめるため、Chrome のように多数の子プロセスを持つアプリも1行で見られます。
+
+**合計が物理メモリを超えることがあります。** `phys_footprint` は圧縮済み・スワップ済みの分を含むためで、二重計上ではありません。
+
+他ユーザーやシステム所有のプロセスは権限の都合で取得できないため、含まれません。取得できた分のうち上位に入らなかったものは「その他のプロセス」としてまとめ、黙って落とさないようにしています。

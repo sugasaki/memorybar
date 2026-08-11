@@ -19,6 +19,10 @@ struct MenuContentView: View {
                 Text("計測に失敗しました")
                     .foregroundStyle(.secondary)
             }
+            if !monitor.topApps.isEmpty {
+                Divider()
+                TopAppsView(apps: monitor.topApps)
+            }
             Divider()
             settings
             floating
