@@ -136,14 +136,20 @@ enum Main {
     }
 }
 
-/// 約2秒間隔でメモリ状況を再計測する監視モデル
+/// 約1秒間隔でメモリ状況を再計測する監視モデル
 @Observable
 @MainActor
 final class MemoryMonitor {
-    static let refreshInterval: TimeInterval = 2.0
-    static let timerTolerance: TimeInterval = 0.2
+    static let refreshInterval: TimeInterval = 1.0
+    /// 省電力のためタイマーに許す誤差。OS が他の起床とまとめられる幅を決めるもので、
+    /// 表示にタイミング要件はないため、Apple が下限として挙げる10%より広く取る。
+    /// 更新間隔から導出し、間隔を変えても比率がずれないようにする
+    static let timerTolerance: TimeInterval = refreshInterval * 0.3
 
     private(set) var snapshot: MemorySnapshot?
+    /// メニューバーに出す文字列。値が動いても表示が変わらないティックでは更新しないことで、
+    /// 再描画を省く(1秒間隔では約半分のティックが該当する)
+    private(set) var menuBarText: String = "--"
     private var currentPressure = MemorySampler.initialPressure()
     private let resources = MemoryMonitorResources()
 
@@ -154,7 +160,7 @@ final class MemoryMonitor {
         let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refresh() }
         }
-        // OSが他の処理とまとめて起床できるよう、更新間隔の10%を許容する
+        // OSが他の処理とまとめて起床できるよう誤差を許容する
         timer.tolerance = Self.timerTolerance
         // メニュー表示中(イベントトラッキング中)も更新が止まらないようcommonモードで回す
         RunLoop.main.add(timer, forMode: .common)
@@ -163,6 +169,17 @@ final class MemoryMonitor {
 
     func refresh() {
         snapshot = MemorySampler.sample(pressure: currentPressure)
+        refreshMenuBarText()
+    }
+
+    /// 表示モードの変更時にも即座に反映できるよう分けている
+    func refreshMenuBarText() {
+        let mode =
+            DisplayMode(rawValue: UserDefaults.standard.string(forKey: DisplayMode.defaultsKey) ?? "")
+            ?? .default
+        let text = snapshot.map(mode.menuBarText(for:)) ?? "--"
+        // 同じ文字列なら代入しない(代入すると観測側の再描画が走るため)
+        if text != menuBarText { menuBarText = text }
     }
 
     private func startPressureMonitoring() {
@@ -191,7 +208,7 @@ struct TrueMemApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var monitor = MemoryMonitor()
     @State private var updateController = UpdateController.shared
-    @AppStorage("displayMode") private var displayModeRaw = DisplayMode.default.rawValue
+    @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
     private var displayMode: DisplayMode {
         DisplayMode(rawValue: displayModeRaw) ?? .default
@@ -206,7 +223,11 @@ struct TrueMemApp: App {
             // 常時表示が本アプリの中心機能なので、テキストで描画する
             HStack(spacing: 3) {
                 Image(systemName: "memorychip")
-                Text(monitor.snapshot.map(displayMode.menuBarText(for:)) ?? "--")
+                // 表示文字列そのものを読むことで、値が動いても文字列が同じティックでは
+                // 再描画が走らない(1秒更新では約半分がこれに当たる)
+                Text(monitor.menuBarText)
+                    // 桁が変わったときに他のメニューバー項目がずれないようにする
+                    .monospacedDigit()
             }
         }
         .menuBarExtraStyle(.window)
