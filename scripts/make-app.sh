@@ -5,9 +5,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-APP_NAME="Memory Info"
-BUNDLE_ID="com.sugasaki.memory-info-menubar"
-EXECUTABLE="memory-info-menubar"
+APP_NAME="TrueMem"
+BUNDLE_ID="com.sugasaki.truemem"
+EXECUTABLE="truemem"
 VERSION="0.1.0"
 
 swift build -c release

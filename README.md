@@ -1,12 +1,14 @@
-# memory-info-menubar
+# TrueMem
 
 macOS のメニューバーに常駐し、メモリの**残容量・使用量をアクティビティモニタと同じ計算式で正確に**リアルタイム表示するアプリ。
+
+名前の由来: 既存の類似アプリのような乖離のない「真の(true)メモリ値」を表示すること。
 
 ## なぜ作ったか
 
 既存のメニューバー系メモリ監視アプリの多くは `vm_stat` の free pages などを表示するため、アクティビティモニタの値と大きく乖離する。macOS は空きメモリを積極的にファイルキャッシュへ回すので、「free pages」は実際に使える残容量を表さない。
 
-このアプリはアクティビティモニタと**同じデータソース(Mach API `host_statistics64`)・同じ計算式**を使う:
+TrueMem はアクティビティモニタと**同じデータソース(Mach API `host_statistics64`)・同じ計算式**を使う:
 
 ```
 使用済みメモリ = アプリメモリ(internal − purgeable) + 確保済み(wired) + 圧縮(compressor)
@@ -34,7 +36,7 @@ swift run              # そのまま実行(メニューバーに常駐)
 
 ```sh
 scripts/make-app.sh
-cp -R "dist/Memory Info.app" /Applications/
+cp -R dist/TrueMem.app /Applications/
 ```
 
 ログイン時に自動起動するには「システム設定 > 一般 > ログイン項目」に追加する。
@@ -44,7 +46,7 @@ cp -R "dist/Memory Info.app" /Applications/
 1回分のサンプルを標準出力に出して終了する:
 
 ```sh
-swift run memory-info-menubar --print
+swift run truemem --print
 ```
 
 アクティビティモニタの「メモリ」タブと突き合わせて確認できる。

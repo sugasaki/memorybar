@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import MemoryInfoMenubar
+@testable import TrueMem
 
 final class MemorySnapshotTests: XCTestCase {
     private let pageSize: UInt64 = 16384

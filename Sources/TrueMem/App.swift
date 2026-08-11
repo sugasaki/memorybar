@@ -9,7 +9,7 @@ enum Main {
             printSample()
             return
         }
-        MemoryInfoMenubarApp.main()
+        TrueMemApp.main()
     }
 
     private static func printSample() {
@@ -55,7 +55,7 @@ final class MemoryMonitor {
     }
 }
 
-struct MemoryInfoMenubarApp: App {
+struct TrueMemApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var monitor = MemoryMonitor()
     @AppStorage("displayMode") private var displayModeRaw = DisplayMode.default.rawValue

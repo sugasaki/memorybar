@@ -2,20 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "memory-info-menubar",
+    name: "truemem",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "memory-info-menubar", targets: ["MemoryInfoMenubar"])
+        .executable(name: "truemem", targets: ["TrueMem"])
     ],
     targets: [
         .executableTarget(
-            name: "MemoryInfoMenubar",
-            path: "Sources/MemoryInfoMenubar"
+            name: "TrueMem",
+            path: "Sources/TrueMem"
         ),
         .testTarget(
-            name: "MemoryInfoMenubarTests",
-            dependencies: ["MemoryInfoMenubar"],
-            path: "Tests/MemoryInfoMenubarTests"
+            name: "TrueMemTests",
+            dependencies: ["TrueMem"],
+            path: "Tests/TrueMemTests"
         ),
     ]
 )
