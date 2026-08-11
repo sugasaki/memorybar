@@ -199,7 +199,10 @@ enum Updater {
         }
 
         let newAppURL = try locateUnpackedApp(in: unpackDir)
-        try verifyReplacement(newAppURL: newAppURL)
+        // 同意した版と、実際に降ってきた版が一致することを確かめる。
+        // ダウンロードは常に latest を取るため、確認からインストールまでの間に
+        // リリースが差し替わっていると別のビルドが入りうる
+        try verifyReplacement(newAppURL: newAppURL, expectedCommit: release.commit)
 
         try launchInstaller(appURL: appURL, newAppURL: newAppURL, workDir: workDir)
         installerLaunched = true
@@ -222,7 +225,7 @@ enum Updater {
     /// 差し替え前に、取得したバンドルが本当に「別ビルドの TrueMem」かを確認する。
     /// GitHub の targetCommitish はタグが既存だと更新されない仕様があるため、
     /// リリースのメタデータだけを信じると同じビルドを延々と再インストールしうる
-    private static func verifyReplacement(newAppURL: URL) throws {
+    private static func verifyReplacement(newAppURL: URL, expectedCommit: String) throws {
         let plistURL = newAppURL.appendingPathComponent("Contents/Info.plist")
         guard let data = try? Data(contentsOf: plistURL),
             let info = try? PropertyListSerialization.propertyList(
@@ -242,6 +245,14 @@ enum Updater {
             throw UpdateError(
                 "配布されている版は現在と同じビルドでした。",
                 recovery: "リリースがまだ更新されていない可能性があります。しばらく待って再度お試しください。")
+        }
+        // 同意した対象と違うものを黙って入れない
+        if let newCommit, let expected = normalizedCommit(expectedCommit),
+            !isSameCommit(newCommit, expected)
+        {
+            throw UpdateError(
+                "確認した版 (\(shortCommit(expected))) と配布物 (\(shortCommit(newCommit))) が一致しません。",
+                recovery: "その後にリリースが更新された可能性があります。もう一度「更新を確認」してください。")
         }
     }
 

@@ -87,6 +87,16 @@ struct MenuContentView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            if updateController.state == .installing {
+                // 上段のキャプションは幅が足りず切り詰められるため、
+                // 進行中は専用の行で状態を示す
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("ダウンロードしてインストールしています…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             // インストールはこのボタンを押したときにだけ実行する(この操作が同意そのもの)
             if let release = updateController.state.availableRelease {
                 HStack {
@@ -99,13 +109,16 @@ struct MenuContentView: View {
                     }
                     .font(.callout)
                     .buttonStyle(.borderedProminent)
+                    .disabled(updateController.state.isBusy)
                 }
             }
             if let detail = updateController.state.failureDetail {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // gh の生出力がそのまま入ることがあるため、パネルが伸び続けないようにする
+                    .lineLimit(3)
+                    .help(detail)
             }
             Toggle("起動時に自動で確認", isOn: updateAutomaticallyBinding)
                 .font(.callout)

@@ -8,7 +8,9 @@ enum UpdateState: Sendable, Equatable {
     case installing
     case upToDate
     case available(Updater.ReleaseInfo)
-    case failed(String)
+    case checkFailed(String)
+    /// インストールの失敗。再試行できるよう対象のリリースを保持する
+    case installFailed(Updater.ReleaseInfo, String)
 
     var message: String {
         switch self {
@@ -17,21 +19,27 @@ enum UpdateState: Sendable, Equatable {
         case .installing: "インストール中…"
         case .upToDate: "最新版です"
         case .available: "新しいバージョンがあります"
-        case .failed: "確認できませんでした"
+        case .checkFailed: "確認できませんでした"
+        case .installFailed: "インストールに失敗しました"
         }
     }
 
     /// 実行中は操作を受け付けない
     var isBusy: Bool { self == .checking || self == .installing }
 
+    /// インストール可能な対象。失敗後も再試行できるようにする
     var availableRelease: Updater.ReleaseInfo? {
-        if case .available(let release) = self { return release }
-        return nil
+        switch self {
+        case .available(let release), .installFailed(let release, _): release
+        default: nil
+        }
     }
 
     var failureDetail: String? {
-        if case .failed(let detail) = self { return detail }
-        return nil
+        switch self {
+        case .checkFailed(let detail), .installFailed(_, let detail): detail
+        default: nil
+        }
     }
 }
 
@@ -43,8 +51,21 @@ final class UpdateController {
 
     static let automaticCheckDefaultsKey = "automaticUpdateChecks"
 
+    typealias FetchHandler = @Sendable () async -> Result<Updater.ReleaseInfo, Updater.UpdateError>
+    typealias InstallHandler = @Sendable (Updater.ReleaseInfo) async -> Updater.UpdateError?
+    typealias OfferPolicy = @Sendable (Updater.ReleaseInfo) -> Bool
+
+    /// 更新として提示する条件。資産の無いリリースは押しても失敗するだけなので提示しない
+    nonisolated static let defaultOfferPolicy: OfferPolicy = { release in
+        Updater.isUpdateAvailable(release) && release.hasAsset
+    }
+
     private(set) var state: UpdateState = .idle
     private var hasCheckedAtLaunch = false
+    // 「確認しただけでインストールされない」ことをテストで固定するための差し込み口
+    private let fetchHandler: FetchHandler
+    private let installHandler: InstallHandler
+    private let shouldOffer: OfferPolicy
 
     var automaticChecksEnabled: Bool {
         didSet {
@@ -53,7 +74,14 @@ final class UpdateController {
         }
     }
 
-    init() {
+    init(
+        fetch: @escaping FetchHandler = { await UpdateController.fetchLatest() },
+        install: @escaping InstallHandler = { await UpdateController.performInstall($0) },
+        shouldOffer: @escaping OfferPolicy = UpdateController.defaultOfferPolicy
+    ) {
+        self.fetchHandler = fetch
+        self.installHandler = install
+        self.shouldOffer = shouldOffer
         let defaults = UserDefaults.standard
         // 未設定なら有効。register ではなく明示的に既定値を決める
         if defaults.object(forKey: Self.automaticCheckDefaultsKey) == nil {
@@ -79,11 +107,11 @@ final class UpdateController {
         guard !state.isBusy else { return }
         state = .checking
         Task {
-            switch await Self.fetchLatest() {
+            switch await fetchHandler() {
             case .success(let release):
-                state = Updater.isUpdateAvailable(release) ? .available(release) : .upToDate
+                state = shouldOffer(release) ? .available(release) : .upToDate
             case .failure(let error):
-                state = .failed(Self.detail(of: error))
+                state = .checkFailed(Self.detail(of: error))
             }
         }
     }
@@ -94,8 +122,8 @@ final class UpdateController {
         state = .installing
         Task {
             // 成功するとプロセスが終了するため、戻ってくるのは失敗したときだけ
-            if let error = await Self.performInstall(release) {
-                state = .failed(Self.detail(of: error))
+            if let error = await installHandler(release) {
+                state = .installFailed(release, Self.detail(of: error))
             }
         }
     }

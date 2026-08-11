@@ -68,11 +68,14 @@ dist/TrueMem.app/Contents/MacOS/truemem --check-update
 
 `swift run truemem --check-update` でも実行できるが、その場合は `.app` ではないためビルド元コミットが不明になり、`gh` の疎通確認にしかならない。更新判定まで確認するには上記のように `.app` 内の実行ファイルを直接起動する。
 
-実際にインストールまで行う場合(GUIのボタンと同じ処理):
+実際にインストールまで行う場合(通常はメニューの「インストールして再起動」を使う):
 
 ```sh
+# TrueMem を終了してから実行する
 /Applications/TrueMem.app/Contents/MacOS/truemem --install-update
 ```
+
+差し替え処理は起動元プロセスの終了を待つ仕組みのため、TrueMem が常駐したままこのコマンドを実行すると、動作中のバンドルを置き換えてしまう。そのため**常駐中は実行を拒否する**ようにしてある。
 
 更新の適用時のログは `~/Library/Logs/TrueMem-update.log` に残る。
 
