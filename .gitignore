@@ -1,0 +1,10 @@
+.build/
+.swiftpm/
+dist/
+DerivedData/
+*.xcodeproj
+.DS_Store
+.env.local
+.env.*.local
+.claude/*
+!.claude/skills/
