@@ -41,9 +41,11 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
 ## 開発パターン
 - **計算ロジックと計測を分離する**: Mach API 呼び出し（`MemorySampler`）と数値の導出（`MemorySnapshot`）を分け、導出側は生のページカウントを受け取る純粋関数としてテストする
 - **値の正確性が最優先**: 表示値の計算式を変更する場合は、アクティビティモニタの表示と突き合わせて検証する（`swift run truemem --print` で1回分のサンプルを標準出力に出せる）
-- ページサイズは `host_page_size` で取得する（Apple Silicon は 16KB。4096 をハードコードしない）
-- **Mach ポート規律**: `mach_host_self()` 等で得た送信権は、同一スコープの `defer` で必ず `mach_port_deallocate` する。常駐アプリのためリークは蓄積する（回帰テスト `MemorySamplerTests` が参照数の増加を検出する）
+- ページサイズは `vm_kernel_page_size` を使う（`vm_statistics64` のカウントはカーネルページ単位。Apple Silicon は 16KB。4096 をハードコードしない）
+- **Mach ポート規律**: `mach_host_self()` 等で得た送信権は、**同一スコープの `defer`** で必ず `mach_port_deallocate` する。解放しないと上限（65535）まで蓄積する規約違反になる。回帰テスト `MemorySamplerTests` は成功パスしか通らないため、各 return 直前で解放する形にすると早期 return のリークを検出できなくなる
 - メモリプレッシャーの状態遷移は公開 API の `DispatchSource` を中心にし、非公開 sysctl を使う場合は小さな互換レイヤーへ隔離して失敗を `.unknown` として扱う
+  - `DispatchSource` の `data` は**必ずイベントハンドラ内で読む**。非同期ホップ後に読むと上書き・クリアされ、正常なのに「取得不能」と誤表示する
+  - **取得できなかった値を正常値（`.normal` や 0）に置換しない**。「分からないのに正常と表示する」より「分からないと表示する」方を選ぶ
 - 外部ライブラリを追加しない（追加が必要と考える場合は利用者に確認）
 
 ## 開発規約

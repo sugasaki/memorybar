@@ -37,7 +37,7 @@ enum Main {
             "  確保済みメモリ:     \(MemoryFormat.detail(snapshot.wired))",
             "  圧縮:               \(MemoryFormat.detail(snapshot.compressed))",
             "キャッシュされたファイル: \(MemoryFormat.detail(snapshot.cachedFiles))",
-            "使用済みスワップ:     \(snapshot.swapUsed.map(MemoryFormat.detail) ?? "取得不能")",
+            "使用済みスワップ:     \(MemoryFormat.detail(snapshot.swapUsed))",
             "残容量:               \(MemoryFormat.detail(snapshot.available))",
             "使用率:               \(Int((snapshot.usedFraction * 100).rounded()))%",
             "メモリプレッシャー:   \(snapshot.pressure.label)",

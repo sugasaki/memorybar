@@ -13,6 +13,9 @@ final class MemorySamplerTests: XCTestCase {
         XCTAssertLessThanOrEqual(snapshot.used, snapshot.total)
     }
 
+    /// 注意: このテストは成功パスしか通らないため、`sample()` が同一スコープの `defer` で
+    /// 解放していることが前提。各 return 直前で解放する形にリファクタすると、
+    /// 早期 return 経路のリークをこのテストは検出できない(AGENTS.md の Mach ポート規律を参照)
     func test連続サンプリングでもMachポート送信権がリークしない() throws {
         // ウォームアップ(遅延初期化などの影響を除外)
         _ = MemorySampler.sample()
@@ -59,5 +62,21 @@ final class MemorySamplerTests: XCTestCase {
         let sizeBased = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
         XCTAssertEqual(truemem_host_vm_info64_count(), sizeBased)
+    }
+
+    /// ページサイズは全計算の乗数なので、取り違えると全ての表示値が定数倍ずれる。
+    /// 定数同士の比較(host_page_size は実装上 vm_kernel_page_size を返すため常に真)ではなく、
+    /// 本番経路の値がカーネルページ単位に整合しているかを検証する
+    func testサンプリング結果がカーネルページサイズと整合する() throws {
+        let pageSize = UInt64(truemem_kernel_page_size())
+        XCTAssertGreaterThan(pageSize, 0)
+
+        let snapshot = try XCTUnwrap(MemorySampler.sample())
+        // ページ数×ページサイズで算出しているので、各項は必ずページサイズの倍数になる
+        XCTAssertEqual(snapshot.wired % pageSize, 0)
+        XCTAssertEqual(snapshot.compressed % pageSize, 0)
+        XCTAssertEqual(snapshot.appMemory % pageSize, 0)
+        // 物理メモリもカーネルページの整数倍(4096 を取り違えると成立しない環境がある)
+        XCTAssertEqual(snapshot.total % pageSize, 0)
     }
 }

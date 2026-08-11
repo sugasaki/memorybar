@@ -24,3 +24,6 @@ jobs:
           test "$(plutil -extract CFBundleShortVersionString raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "0.1.0"
           test "$(plutil -extract CFBundleVersion raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "1"
           codesign --verify --deep --strict "dist/TrueMem.app"
+          # --verify は未署名なら失敗するが署名の種別までは表明しないため、
+          # ad-hoc 署名が実際に付いていることをアサートする
+          codesign -dv --verbose=4 "dist/TrueMem.app" 2>&1 | grep -q "Signature=adhoc"

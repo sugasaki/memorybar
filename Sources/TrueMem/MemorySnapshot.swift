@@ -38,7 +38,7 @@ enum MemoryPressure: Sendable, Equatable {
         case .normal: "通常"
         case .warning: "注意"
         case .critical: "危険"
-        case .unknown: "取得不能"
+        case .unknown: MemoryFormat.unavailable
         }
     }
 }
