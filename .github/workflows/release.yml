@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# latest リリースの作成・更新に必要
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Universal バイナリで .app を生成
+        env:
+          # 更新判定はこのコミットSHAで行う
+          APP_COMMIT: ${{ github.sha }}
+          UNIVERSAL: "1"
+        run: scripts/make-app.sh
+
+      - name: Universal になっていることを確認
+        run: |
+          lipo -archs dist/TrueMem.app/Contents/MacOS/truemem | tee /tmp/archs
+          grep -q arm64 /tmp/archs
+          grep -q x86_64 /tmp/archs
+
+      - name: 埋め込みコミットSHAを確認
+        run: |
+          embedded=$(/usr/libexec/PlistBuddy -c "Print :TMSourceCommit" dist/TrueMem.app/Contents/Info.plist)
+          echo "embedded=$embedded"
+          test "$embedded" = "${{ github.sha }}"
+
+      - name: zip に固める
+        run: ditto -c -k --keepParent dist/TrueMem.app dist/TrueMem.zip
+
+      - name: latest リリースを公開
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > release-notes.md <<EOF
+          \`${GITHUB_SHA}\` からの自動ビルドです。
+
+          [TrueMem.zip](https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/TrueMem.zip) をダウンロードし、展開して \`TrueMem.app\` を \`/Applications\` に置いてください。
+
+          Apple Silicon と Intel の両方で動作する Universal ビルドです。ad-hoc 署名のため、初回起動時のみ手動での許可が必要です(README を参照)。
+          EOF
+
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest \
+              --title "Latest build" \
+              --notes-file release-notes.md \
+              --target "${GITHUB_SHA}" \
+              --latest
+          else
+            gh release create latest \
+              --title "Latest build" \
+              --notes-file release-notes.md \
+              --target "${GITHUB_SHA}" \
+              --latest
+          fi
+
+          gh release upload latest dist/TrueMem.zip --clobber

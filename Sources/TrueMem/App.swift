@@ -22,7 +22,38 @@ enum Main {
             printSample()
             return
         }
+        // 検証用: 更新確認だけを行って結果を標準出力に出す(インストールはしない)
+        if CommandLine.arguments.contains("--check-update") {
+            printUpdateStatus()
+            return
+        }
         TrueMemApp.main()
+    }
+
+    private static func printUpdateStatus() {
+        print("現在のビルド: \(UpdateController.currentVersionLabel)")
+        guard let gh = Updater.locateGH() else {
+            FileHandle.standardError.write(
+                Data("gh が見つかりません(PATH非依存の既定パスにも存在しない)\n".utf8))
+            exit(1)
+        }
+        print("gh: \(gh.path)")
+        do {
+            let release = try Updater.fetchLatestRelease()
+            print("最新リリース: \(Updater.shortCommit(release.commit)) (\(release.publishedAt))")
+            print("アセット: \(release.assetNames.joined(separator: ", "))")
+            print(
+                Updater.isUpdateAvailable(release)
+                    ? "更新あり" : "更新なし(最新、またはビルド元コミット不明)")
+        } catch let error as Updater.UpdateError {
+            let detail = [error.errorDescription, error.recoverySuggestion]
+                .compactMap { $0 }.joined(separator: " / ")
+            FileHandle.standardError.write(Data("\(detail)\n".utf8))
+            exit(1)
+        } catch {
+            FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
     }
 
     private static func printSample() {
@@ -100,6 +131,7 @@ final class MemoryMonitor {
 struct TrueMemApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var monitor = MemoryMonitor()
+    @State private var updateController = UpdateController()
     @AppStorage("displayMode") private var displayModeRaw = DisplayMode.default.rawValue
 
     private var displayMode: DisplayMode {
@@ -108,7 +140,8 @@ struct TrueMemApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(monitor: monitor)
+            MenuContentView(monitor: monitor, updateController: updateController)
+                .task { updateController.checkAtLaunchIfEnabled() }
         } label: {
             if let snapshot = monitor.snapshot {
                 Label(displayMode.menuBarText(for: snapshot), systemImage: "memorychip")
