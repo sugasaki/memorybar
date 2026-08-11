@@ -8,8 +8,14 @@ let package = Package(
         .executable(name: "truemem", targets: ["TrueMem"])
     ],
     targets: [
+        .target(
+            name: "CMachSupport",
+            path: "Sources/CMachSupport",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "TrueMem",
+            dependencies: ["CMachSupport"],
             path: "Sources/TrueMem"
         ),
         .testTarget(

@@ -2,6 +2,18 @@ import AppKit
 import Dispatch
 import SwiftUI
 
+/// Swift 6.1では@MainActorクラスのdeinitが非分離のため、
+/// ライフサイクル資源を非Actorの専用ホルダーへまとめて確実に停止する。
+private final class MemoryMonitorResources: @unchecked Sendable {
+    var pressureSource: DispatchSourceMemoryPressure?
+    var timer: Timer?
+
+    deinit {
+        timer?.invalidate()
+        pressureSource?.cancel()
+    }
+}
+
 @main
 enum Main {
     static func main() {
@@ -43,8 +55,7 @@ final class MemoryMonitor {
 
     private(set) var snapshot: MemorySnapshot?
     private var currentPressure = MemorySampler.initialPressure()
-    private var pressureSource: DispatchSourceMemoryPressure?
-    private var timer: Timer?
+    private let resources = MemoryMonitorResources()
 
     init() {
         startPressureMonitoring()
@@ -57,12 +68,7 @@ final class MemoryMonitor {
         timer.tolerance = Self.timerTolerance
         // メニュー表示中(イベントトラッキング中)も更新が止まらないようcommonモードで回す
         RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-    }
-
-    deinit {
-        timer?.invalidate()
-        pressureSource?.cancel()
+        resources.timer = timer
     }
 
     func refresh() {
@@ -73,7 +79,7 @@ final class MemoryMonitor {
         let source = DispatchSource.makeMemoryPressureSource(
             eventMask: [.normal, .warning, .critical],
             queue: .main)
-        pressureSource = source
+        resources.pressureSource = source
         source.setEventHandler { [weak self] in
             Task { @MainActor [weak self] in
                 self?.handlePressureEvent()
@@ -83,7 +89,7 @@ final class MemoryMonitor {
     }
 
     private func handlePressureEvent() {
-        guard let event = pressureSource?.data else { return }
+        guard let event = resources.pressureSource?.data else { return }
         currentPressure = MemoryPressure(dispatchEvent: event)
         refresh()
     }

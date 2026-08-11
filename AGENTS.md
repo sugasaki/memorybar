@@ -34,6 +34,7 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - `MemorySnapshot.swift` — 計測値から使用量・残量を導出する純粋ロジック
   - `DisplayMode.swift` — メニューバー表示モードとフォーマット
   - `MenuContentView.swift` — クリック時の詳細パネル
+- `Sources/CMachSupport/` — Swift へ import できない Mach 定数を公開する最小 C shim
 - `Tests/TrueMemTests/` — ユニットテスト（純粋ロジック + 実機サンプリング・Mach ポートリーク回帰）
 - `scripts/make-app.sh` — .app バンドル生成スクリプト
 

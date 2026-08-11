@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import CMachSupport
 
 /// Mach / sysctlからの計測。副作用(システムコール)はこのファイルに隔離し、
 /// 数値の導出は`MemorySnapshot`側で行う。
@@ -12,7 +13,7 @@ enum MemorySampler {
         defer { mach_port_deallocate(mach_task_self_, host) }
 
         var stats = vm_statistics64_data_t()
-        var count = mach_msg_type_number_t(HOST_VM_INFO64_COUNT)
+        var count = truemem_host_vm_info64_count()
         let result = withUnsafeMutablePointer(to: &stats) { pointer in
             pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 host_statistics64(host, HOST_VM_INFO64, $0, &count)
