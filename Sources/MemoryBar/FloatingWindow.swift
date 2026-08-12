@@ -77,13 +77,14 @@ final class FloatingWindowController {
     /// 状態ごとの高さ。開閉を往復しても利用者が決めた大きさを失わないため
     nonisolated static let compactHeightKey = "floatingCompactHeight"
     nonisolated static let expandedHeightKey = "floatingExpandedHeight"
-    /// 要約のみの既定サイズ。既定はコンパクトに保つ
-    nonisolated static let compactSize = NSSize(width: 300, height: 168)
+    /// 要約のみの既定サイズ。既定はコンパクトに保つ。
+    /// 総量・使用量・利用可能の3行を含めた実測値(Issue #66)
+    nonisolated static let compactSize = NSSize(width: 300, height: 236)
     /// 詳細を開いたときの高さ(内訳7行 + アプリ一覧6行が収まる)
-    nonisolated static let expandedHeight: CGFloat = 560
+    nonisolated static let expandedHeight: CGFloat = 620
     nonisolated static var defaultSize: NSSize { compactSize }
     /// これ以上小さくすると要約すら読めなくなる
-    nonisolated static let minimumSize = NSSize(width: 220, height: 130)
+    nonisolated static let minimumSize = NSSize(width: 240, height: 180)
 
     private var panel: NSPanel?
     private let monitor: MemoryMonitor
@@ -144,7 +145,10 @@ final class FloatingWindowController {
         // .accessory なアプリでもクリックでアプリを前面化させない
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
-        panel.contentView = NSHostingView(
+        // NSHostingView をそのまま contentView にすると、Auto Layout で
+        // ウィンドウの大きさが内容に支配される。根が GeometryReader で固有サイズを
+        // 持たないため最小値に張り付くので、器に載せて追従だけさせる(Issue #66)
+        let hosting = NSHostingView(
             rootView: FloatingContentView(
                 monitor: monitor,
                 onClose: { [weak self] in
@@ -154,6 +158,13 @@ final class FloatingWindowController {
                 onDetailsToggled: { [weak self] expanded in
                     self?.resizeForDetails(expanded: expanded)
                 }))
+        let container = NSView(frame: NSRect(origin: .zero, size: Self.defaultSize))
+        hosting.translatesAutoresizingMaskIntoConstraints = true
+        hosting.frame = container.bounds
+        hosting.autoresizingMask = [.width, .height]
+        container.addSubview(hosting)
+        panel.contentView = container
+        panel.setContentSize(Self.defaultSize)
 
         // 位置とサイズを記憶する
         panel.setFrameAutosaveName(Self.frameAutosaveName)
@@ -161,14 +172,16 @@ final class FloatingWindowController {
         if panel.frame.origin == .zero || !Self.isOnAnyScreen(panel.frame) {
             Self.moveToDefaultPosition(panel)
         }
-        // 詳細を開いた状態で起動したとき、記憶した高さが足りないと中身が収まらない。
-        // 折りたたみ状態では記憶した高さをそのまま使う(利用者の選択を壊さない)
-        if UserDefaults.standard.bool(forKey: Self.detailsExpandedKey) {
+        // 記憶した高さが内容に足りないと中身が収まらない。
+        // 表示項目が増えたときに、以前の高さのまま切れて見えるのを防ぐ
+        let expanded = UserDefaults.standard.bool(forKey: Self.detailsExpandedKey)
+        let required = expanded ? Self.expandedHeight : Self.compactSize.height
+        if panel.frame.height < required {
             let visible = Self.visibleFrame(containing: panel.frame)
             panel.setFrame(
                 Self.frame(
-                    for: true, current: panel.frame,
-                    storedHeight: Self.storedHeight(expanded: true), within: visible),
+                    for: expanded, current: panel.frame,
+                    storedHeight: Self.storedHeight(expanded: expanded), within: visible),
                 display: false)
         }
         panel.orderFrontRegardless()

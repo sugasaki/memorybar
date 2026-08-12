@@ -42,17 +42,8 @@ enum DisplayMode: String, CaseIterable, Identifiable, Sendable {
     /// 大きな数値が何を指すかを示す語
     var primaryCaption: String {
         switch self {
-        case .freeGB: "空き"
-        case .usedGB, .usedPercent: "使用済み"
-        }
-    }
-
-    /// 右肩に添える補助表示。
-    /// 使用率を主役にしたときに%を二度出しても意味がないため、残容量へ差し替える
-    func secondaryText(for snapshot: MemorySnapshot) -> String {
-        switch self {
-        case .freeGB, .usedGB: Self.percentText(snapshot)
-        case .usedPercent: "空き \(MemoryFormat.detail(snapshot.available))"
+        case .freeGB: MemoryLabel.available
+        case .usedGB, .usedPercent: MemoryLabel.used
         }
     }
 
@@ -64,6 +55,16 @@ enum DisplayMode: String, CaseIterable, Identifiable, Sendable {
     static func compactGB(_ bytes: UInt64) -> String {
         String(format: "%.1fG", Double(bytes) / 1_073_741_824)
     }
+}
+
+/// 表示に使う名称。表示面ごとに言い回しがぶれないよう一箇所で決める
+enum MemoryLabel {
+    /// 搭載されている物理メモリの総量。「物理」は伝わりにくいため使わない
+    static let total = "搭載メモリ"
+    static let used = "使用済みメモリ"
+    /// いま使える量。「空き」より意味が明確
+    static let available = "利用可能なメモリ"
+    static let usedRatio = "使用率"
 }
 
 enum MemoryFormat {

@@ -80,17 +80,26 @@ extension DisplayModeTests {
     }
 
     func test大きな数値の説明語がモードに合う() {
-        XCTAssertEqual(DisplayMode.freeGB.primaryCaption, "空き")
-        XCTAssertEqual(DisplayMode.usedGB.primaryCaption, "使用済み")
-        XCTAssertEqual(DisplayMode.usedPercent.primaryCaption, "使用済み")
+        // MemoryLabel と突き合わせても同語反復になるため、期待する語を直に書く
+        XCTAssertEqual(DisplayMode.freeGB.primaryCaption, "利用可能なメモリ")
+        XCTAssertEqual(DisplayMode.usedGB.primaryCaption, "使用済みメモリ")
+        XCTAssertEqual(DisplayMode.usedPercent.primaryCaption, "使用済みメモリ")
     }
 
-    func test使用率モードでは補助表示に残容量を出す() {
-        // 主役が%のとき、右肩にも%を出しても意味がない
-        let s = snapshot()
-        XCTAssertEqual(DisplayMode.freeGB.secondaryText(for: s), "88%")
-        XCTAssertEqual(DisplayMode.usedGB.secondaryText(for: s), "88%")
-        XCTAssertTrue(DisplayMode.usedPercent.secondaryText(for: s).contains("空き"))
-        XCTAssertFalse(DisplayMode.usedPercent.secondaryText(for: s).contains("%"))
+    func test伝わりにくい表記を使わない() {
+        // 「空き」「物理」は意味が取りにくいとして置き換えた(Issue #66)。
+        // 名称を足すときに戻ってしまわないよう、まとめて見張る
+        let labels = [
+            MemoryLabel.total, MemoryLabel.used, MemoryLabel.available, MemoryLabel.usedRatio,
+        ]
+        for label in labels {
+            XCTAssertFalse(label.contains("空き"), "「\(label)」に「空き」が残っている")
+            XCTAssertFalse(label.contains("物理"), "「\(label)」に「物理」が残っている")
+        }
+        XCTAssertEqual(Set(labels).count, labels.count, "同じ語が2つの意味に使われている")
+    }
+
+    func test使用率は百分率で表す() {
+        XCTAssertEqual(DisplayMode.percentText(snapshot()), "88%")
     }
 }
