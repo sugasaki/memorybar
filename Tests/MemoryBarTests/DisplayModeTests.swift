@@ -52,3 +52,45 @@ final class DisplayModeTests: XCTestCase {
         XCTAssertEqual(DisplayMode.default, .freeGB)
     }
 }
+
+/// 表示モードが要約表示にも反映されること(Issue #63)
+extension DisplayModeTests {
+    private func snapshot() -> MemorySnapshot {
+        // 総量 24GB のうち 21GB 使用、残り 3GB(pageSize=1 でバイト直指定)
+        let total: UInt64 = 24 * 1_073_741_824
+        let free: UInt64 = 3 * 1_073_741_824
+        return MemorySnapshot(
+            totalBytes: total, pageSize: 1,
+            internalPages: 0, purgeablePages: 0, wiredPages: total - free,
+            compressedPages: 0, externalPages: 0, freePages: free,
+            speculativePages: 0, swapUsedBytes: 0, pressure: .normal)
+    }
+
+    func test要約の大きな数値はメニューバーと同じ値を指す() {
+        let s = snapshot()
+        // 残容量モード: どちらも残容量
+        XCTAssertEqual(DisplayMode.freeGB.menuBarText(for: s), "3.0G")
+        XCTAssertEqual(DisplayMode.freeGB.primaryText(for: s), MemoryFormat.detail(s.available))
+        // 使用量モード: どちらも使用済み
+        XCTAssertEqual(DisplayMode.usedGB.menuBarText(for: s), "21.0G")
+        XCTAssertEqual(DisplayMode.usedGB.primaryText(for: s), MemoryFormat.detail(s.used))
+        // 使用率モード: どちらも百分率
+        XCTAssertEqual(DisplayMode.usedPercent.menuBarText(for: s), "88%")
+        XCTAssertEqual(DisplayMode.usedPercent.primaryText(for: s), "88%")
+    }
+
+    func test大きな数値の説明語がモードに合う() {
+        XCTAssertEqual(DisplayMode.freeGB.primaryCaption, "空き")
+        XCTAssertEqual(DisplayMode.usedGB.primaryCaption, "使用済み")
+        XCTAssertEqual(DisplayMode.usedPercent.primaryCaption, "使用済み")
+    }
+
+    func test使用率モードでは補助表示に残容量を出す() {
+        // 主役が%のとき、右肩にも%を出しても意味がない
+        let s = snapshot()
+        XCTAssertEqual(DisplayMode.freeGB.secondaryText(for: s), "88%")
+        XCTAssertEqual(DisplayMode.usedGB.secondaryText(for: s), "88%")
+        XCTAssertTrue(DisplayMode.usedPercent.secondaryText(for: s).contains("空き"))
+        XCTAssertFalse(DisplayMode.usedPercent.secondaryText(for: s).contains("%"))
+    }
+}

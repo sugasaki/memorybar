@@ -82,7 +82,7 @@ struct MenuContentView: View {
     }
 
     private var settings: some View {
-        Picker("メニューバー表示", selection: $displayModeRaw) {
+        Picker("表示する値", selection: $displayModeRaw) {
             ForEach(DisplayMode.allCases) { mode in
                 Text(mode.label).tag(mode.rawValue)
             }

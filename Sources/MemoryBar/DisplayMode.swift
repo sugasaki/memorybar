@@ -1,6 +1,7 @@
 import Foundation
 
-/// メニューバーに常時表示する数値の種類(設定で切替可能)
+/// 表示する値の種類(設定で切替可能)。
+/// メニューバーと要約表示の両方で同じ値を出すために使う
 enum DisplayMode: String, CaseIterable, Identifiable, Sendable {
     case freeGB
     case usedGB
@@ -25,8 +26,38 @@ enum DisplayMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .freeGB: Self.compactGB(snapshot.available)
         case .usedGB: Self.compactGB(snapshot.used)
-        case .usedPercent: "\(Int((snapshot.usedFraction * 100).rounded()))%"
+        case .usedPercent: Self.percentText(snapshot)
         }
+    }
+
+    /// 要約表示の大きな数値。メニューバーと同じ値を出す
+    func primaryText(for snapshot: MemorySnapshot) -> String {
+        switch self {
+        case .freeGB: MemoryFormat.detail(snapshot.available)
+        case .usedGB: MemoryFormat.detail(snapshot.used)
+        case .usedPercent: Self.percentText(snapshot)
+        }
+    }
+
+    /// 大きな数値が何を指すかを示す語
+    var primaryCaption: String {
+        switch self {
+        case .freeGB: "空き"
+        case .usedGB, .usedPercent: "使用済み"
+        }
+    }
+
+    /// 右肩に添える補助表示。
+    /// 使用率を主役にしたときに%を二度出しても意味がないため、残容量へ差し替える
+    func secondaryText(for snapshot: MemorySnapshot) -> String {
+        switch self {
+        case .freeGB, .usedGB: Self.percentText(snapshot)
+        case .usedPercent: "空き \(MemoryFormat.detail(snapshot.available))"
+        }
+    }
+
+    static func percentText(_ snapshot: MemorySnapshot) -> String {
+        "\(Int((snapshot.usedFraction * 100).rounded()))%"
     }
 
     /// メニューバー向けのコンパクトな GB 表記(例: "12.3G")。メモリ慣例に合わせ 1GB = 1024^3
