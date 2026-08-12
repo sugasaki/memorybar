@@ -56,6 +56,9 @@ final class UpdateController {
     static let shared = UpdateController()
 
     static let automaticCheckDefaultsKey = "automaticUpdateChecks"
+    static let automaticInstallDefaultsKey = "automaticUpdateInstall"
+    /// 定期確認の間隔。頻繁に見に行く必要はない
+    static let periodicCheckInterval: TimeInterval = 6 * 60 * 60
 
     typealias FetchHandler = @Sendable () async -> Result<Updater.ReleaseInfo, Updater.UpdateError>
     typealias InstallHandler = @Sendable (Updater.ReleaseInfo) async -> Updater.UpdateError?
@@ -70,6 +73,7 @@ final class UpdateController {
 
     private(set) var state: UpdateState = .idle
     private var hasCheckedAtLaunch = false
+    private var periodicTimer: Timer?
     // 「確認しただけでインストールされない」ことをテストで固定するための差し込み口
     private let fetchHandler: FetchHandler
     private let installHandler: InstallHandler
@@ -80,6 +84,19 @@ final class UpdateController {
         didSet {
             UserDefaults.standard.set(
                 automaticChecksEnabled, forKey: Self.automaticCheckDefaultsKey)
+            schedulePeriodicChecks()
+        }
+    }
+
+    /// 更新が見つかったら確認を挟まずインストールするか。
+    ///
+    /// Issue #22 では「同意なしにインストールしない」としたが、その趣旨は
+    /// **利用者が意図しない**インストールを防ぐことだった。ここは設定として
+    /// 明示され、いつでも切れるため趣旨は保たれる(Issue #51)
+    var automaticInstallEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                automaticInstallEnabled, forKey: Self.automaticInstallDefaultsKey)
         }
     }
 
@@ -100,12 +117,32 @@ final class UpdateController {
         } else {
             automaticChecksEnabled = defaults.bool(forKey: Self.automaticCheckDefaultsKey)
         }
+        if defaults.object(forKey: Self.automaticInstallDefaultsKey) == nil {
+            automaticInstallEnabled = true
+        } else {
+            automaticInstallEnabled = defaults.bool(forKey: Self.automaticInstallDefaultsKey)
+        }
     }
 
-    /// 起動時の自動確認。**確認するだけで、インストールはしない**
+    /// 一定間隔での確認を仕込む。スリープ復帰後も動き続けるよう common モードで回す
+    func schedulePeriodicChecks() {
+        periodicTimer?.invalidate()
+        periodicTimer = nil
+        guard automaticChecksEnabled else { return }
+        let timer = Timer(timeInterval: Self.periodicCheckInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.check() }
+        }
+        // 数時間おきの確認に厳密な時刻は不要。OS がまとめて起床できるようにする
+        timer.tolerance = Self.periodicCheckInterval * 0.2
+        RunLoop.main.add(timer, forMode: .common)
+        periodicTimer = timer
+    }
+
+    /// 起動時の自動確認。以降は一定間隔でも確認する
     func checkAtLaunchIfEnabled() {
         guard !hasCheckedAtLaunch else { return }
         hasCheckedAtLaunch = true
+        schedulePeriodicChecks()
         guard automaticChecksEnabled else { return }
         check()
     }
@@ -122,6 +159,8 @@ final class UpdateController {
             case .success(let release):
                 if shouldOffer(release) {
                     state = .available(release)
+                    // 設定で有効なときだけ、確認を挟まず適用する
+                    if automaticInstallEnabled { installAvailableUpdate() }
                 } else {
                     // 判定できないだけの状態を「最新版です」と断言しない
                     state = isBuildIdentified() ? .upToDate : .undeterminable

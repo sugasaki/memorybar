@@ -181,9 +181,14 @@ struct MenuContentView: View {
                     .lineLimit(3)
                     .help(detail)
             }
-            Toggle("起動時に自動で確認", isOn: updateAutomaticallyBinding)
+            Toggle("定期的に自動で確認", isOn: updateAutomaticallyBinding)
                 .font(.callout)
                 .toggleStyle(.checkbox)
+            Toggle("更新を自動でインストール", isOn: automaticInstallBinding)
+                .font(.callout)
+                .toggleStyle(.checkbox)
+                .disabled(!updateController.automaticChecksEnabled)
+                .help("更新が見つかったら確認を挟まずインストールします。適用時にアプリが再起動します")
         }
     }
 
@@ -191,6 +196,12 @@ struct MenuContentView: View {
         Binding(
             get: { updateController.automaticChecksEnabled },
             set: { updateController.automaticChecksEnabled = $0 })
+    }
+
+    private var automaticInstallBinding: Binding<Bool> {
+        Binding(
+            get: { updateController.automaticInstallEnabled },
+            set: { updateController.automaticInstallEnabled = $0 })
     }
 
     private var footer: some View {
