@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "明示するバージョン(例 1.0.0)。空なら直近タグのパッチを進める"
+        required: false
+        type: string
 
 # latest リリースの作成・更新に必要
 permissions:
@@ -19,13 +24,59 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
+        with:
+          # タグからバージョンを決めるため、履歴とタグをすべて取得する
+          fetch-depth: 0
+
+      - name: 次のバージョンを決める
+        id: version
+        run: |
+          requested="${{ inputs.version }}"
+          if [ -n "$requested" ]; then
+            # メジャー・マイナーを上げたいときは、手動実行で明示する。
+            # タグを後から打っても、このワークフローはブランチへの push でしか
+            # 起動しないため確実に反映されない
+            version="${requested#v}"
+            echo "指定されたバージョン v$version を使用します"
+          else
+            # 同じコミットに複数のタグが付いていても結果が変わらないよう、
+            # バージョンとして最も大きいものを選ぶ
+            exact="$(git tag --points-at HEAD --list 'v[0-9]*' | sort -V | tail -1)"
+            if [ -n "$exact" ]; then
+              version="${exact#v}"
+              echo "このコミットのタグ $exact を使用します"
+            else
+              latest="$(git tag --list 'v[0-9]*' | sort -V | tail -1)"
+              latest="${latest:-v0.0.0}"
+              IFS=. read -r major minor patch <<< "${latest#v}"
+              version="${major}.${minor}.$((patch + 1))"
+              echo "$latest → v$version"
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: バージョンのタグを打つ
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.version.outputs.version }}"
+          # ビルドより先に打つ。途中で中断されてもタグが残るため、
+          # 次の実行が同じ番号を再利用せず、番号が単調に進む
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag は既にあります"
+          else
+            gh api --method POST /repos/${{ github.repository }}/git/refs \
+              -f ref="refs/tags/$tag" -f sha="${{ github.sha }}" \
+              && echo "$tag を作成しました"
+          fi
 
       - name: Universal バイナリで .app を生成
         env:
           # 更新判定はこのコミットSHAで行う
           APP_COMMIT: ${{ github.sha }}
           UNIVERSAL: "1"
-          # APP_VERSION は VERSION ファイルから取る。ビルド番号は実行回数を使う
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          # ビルド番号は実行回数を使う
           APP_BUILD: ${{ github.run_number }}
         run: scripts/make-app.sh
 
@@ -40,6 +91,10 @@ jobs:
           embedded=$(/usr/libexec/PlistBuddy -c "Print :TMSourceCommit" dist/TrueMem.app/Contents/Info.plist)
           echo "embedded=$embedded"
           test "$embedded" = "${{ github.sha }}"
+          # バージョンが意図した値で埋め込まれているか
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" dist/TrueMem.app/Contents/Info.plist)
+          echo "version=$version"
+          test "$version" = "${{ steps.version.outputs.version }}"
 
       - name: zip に固める
         run: ditto -c -k --keepParent dist/TrueMem.app dist/TrueMem.zip
@@ -49,7 +104,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > release-notes.md <<EOF
-          \`${GITHUB_SHA}\` からの自動ビルドです。
+          **v${{ steps.version.outputs.version }}** (\`${GITHUB_SHA}\` からの自動ビルド)
 
           [TrueMem.zip](https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/TrueMem.zip) をダウンロードし、展開して \`TrueMem.app\` を \`/Applications\` に置いてください。
 
