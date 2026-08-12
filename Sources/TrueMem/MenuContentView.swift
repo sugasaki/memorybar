@@ -7,10 +7,13 @@ struct MenuContentView: View {
     let updateController: UpdateController
     let floatingController: FloatingWindowController
     @State private var floatingVisible = false
+    @State private var contentHeight: CGFloat = MenuContentView.fallbackPanelHeight
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
     /// 画面に対して残す余白。メニューバーと画面端に食い込ませない
     private static let screenMargin: CGFloat = 120
+    /// 実測できるまでの高さ。潰れて見えないより、多少大きい方が害が小さい
+    static let fallbackPanelHeight: CGFloat = 620
 
     /// パネルの高さの上限。アプリ一覧や更新の詳細が加わると、
     /// 短い画面や拡大表示では画面高を超えて末尾が操作できなくなる
@@ -20,12 +23,24 @@ struct MenuContentView: View {
     }
 
     var body: some View {
+        // MenuBarExtra(.window) は内容の固有サイズからパネルの大きさを決めるが、
+        // ScrollView は縦の固有サイズを持たない。そのまま包むとパネルが潰れるため、
+        // 内容の高さを実測して明示的に与える(Issue #41)
         ScrollView(.vertical) {
             content
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: PanelContentHeightKey.self, value: proxy.size.height)
+                    })
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: 280)
-        .frame(maxHeight: maxPanelHeight)
+        .frame(height: min(contentHeight, maxPanelHeight))
+        .onPreferenceChange(PanelContentHeightKey.self) { height in
+            // 0 を採用すると潰れるため、実測できるまでは既定値のままにする
+            if height > 0 { contentHeight = height }
+        }
     }
 
     private var content: some View {
@@ -222,5 +237,13 @@ struct MenuContentView: View {
         case .critical: .red
         case .unknown: .gray
         }
+    }
+}
+
+/// パネル内容の実測高さを親へ伝える
+private struct PanelContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
