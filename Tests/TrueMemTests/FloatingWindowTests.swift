@@ -95,6 +95,33 @@ final class FloatingWindowTests: XCTestCase {
         XCTAssertEqual(result.height, 800)
     }
 
+    func test状態ごとに記憶した高さを復元する() {
+        // 展開時に広げた高さは、折りたたんで再度開いたときに戻ってくる。
+        // 上端を基準に下へ伸ばすので、画面に収まる位置に置いて確かめる
+        let current = NSRect(x: 100, y: 700, width: 300, height: 168)
+        let result = FloatingWindowController.frame(
+            for: true, current: current, storedHeight: 720, within: screen)
+        XCTAssertEqual(result.height, 720)
+        XCTAssertEqual(result.maxY, current.maxY, accuracy: 0.5)
+    }
+
+    func test折りたたみ時に記憶した高さも復元する() {
+        // 折りたたみ状態で広げていた高さを、展開から戻ったときに失わない
+        let current = NSRect(x: 100, y: 300, width: 300, height: 560)
+        let result = FloatingWindowController.frame(
+            for: false, current: current, storedHeight: 300, within: screen)
+        XCTAssertEqual(result.height, 300)
+    }
+
+    func test記憶した高さも画面外にはみ出さない() {
+        let small = NSRect(x: 0, y: 0, width: 1600, height: 400)
+        let current = NSRect(x: 100, y: 100, width: 300, height: 168)
+        let result = FloatingWindowController.frame(
+            for: true, current: current, storedHeight: 900, within: small)
+        XCTAssertLessThanOrEqual(result.height, small.height)
+        XCTAssertGreaterThanOrEqual(result.minY, small.minY)
+    }
+
     func test折りたたむと要約の高さまで縮む() {
         let current = NSRect(x: 100, y: 300, width: 300, height: 560)
         let result = FloatingWindowController.frame(for: false, current: current, within: screen)

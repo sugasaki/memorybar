@@ -72,6 +72,9 @@ final class FloatingWindowController {
     nonisolated static let frameAutosaveName = "TrueMemFloatingWindow"
     /// 詳細の開閉状態。パネルとは別に持つ(常時表示と都度確認で役割が異なるため)
     nonisolated static let detailsExpandedKey = "floatingDetailsExpanded"
+    /// 状態ごとの高さ。開閉を往復しても利用者が決めた大きさを失わないため
+    nonisolated static let compactHeightKey = "floatingCompactHeight"
+    nonisolated static let expandedHeightKey = "floatingExpandedHeight"
     /// 要約のみの既定サイズ。既定はコンパクトに保つ
     nonisolated static let compactSize = NSSize(width: 300, height: 168)
     /// 詳細を開いたときの高さ(内訳7行 + アプリ一覧6行が収まる)
@@ -161,35 +164,56 @@ final class FloatingWindowController {
         if UserDefaults.standard.bool(forKey: Self.detailsExpandedKey) {
             let visible = Self.visibleFrame(containing: panel.frame)
             panel.setFrame(
-                Self.frame(for: true, current: panel.frame, within: visible), display: false)
+                Self.frame(
+                    for: true, current: panel.frame,
+                    storedHeight: Self.storedHeight(expanded: true), within: visible),
+                display: false)
         }
         panel.orderFrontRegardless()
         self.panel = panel
     }
 
-    /// 詳細の開閉に合わせて高さを変える
+    /// 詳細の開閉に合わせて高さを変える。
+    /// 状態ごとに高さを覚えるので、利用者がどちらかで広げてもそれを失わない
     private func resizeForDetails(expanded: Bool) {
         guard let panel else { return }
+        // 切り替える前の状態の高さを覚えておく
+        Self.storeHeight(panel.frame.height, expanded: !expanded)
         let visible = Self.visibleFrame(containing: panel.frame)
-        let target = Self.frame(for: expanded, current: panel.frame, within: visible)
+        let target = Self.frame(
+            for: expanded, current: panel.frame, storedHeight: Self.storedHeight(expanded: expanded),
+            within: visible)
         // animate: true は表示中のウィンドウで約0.35秒メインスレッドを止め、
         // その間 1秒更新もメニューバーの文字列も停止するため使わない
         panel.setFrame(target, display: true)
     }
 
+    /// 状態ごとに記憶した高さ。無ければ nil
+    nonisolated static func storedHeight(expanded: Bool) -> CGFloat? {
+        let key = expanded ? expandedHeightKey : compactHeightKey
+        let value = UserDefaults.standard.double(forKey: key)
+        return value > 0 ? CGFloat(value) : nil
+    }
+
+    nonisolated static func storeHeight(_ height: CGFloat, expanded: Bool) {
+        UserDefaults.standard.set(
+            Double(height), forKey: expanded ? expandedHeightKey : compactHeightKey)
+    }
+
     /// 開閉後のフレームを求める。
     ///
     /// - 上端を固定して下方向へ伸縮する(置いた位置がずれないようにする)
-    /// - 展開時は縮めない。利用者が広げた高さを開閉で失わないため
+    /// - その状態で記憶した高さがあればそれを使う。利用者がどちらの状態で
+    ///   広げても、開閉を往復して失われないようにする
     /// - 画面の可視領域からはみ出さないよう収める。AppKit の自動補正は
     ///   上端しか守らないため、下端は自分で見る必要がある
-    nonisolated static func frame(for expanded: Bool, current: NSRect, within visible: NSRect)
-        -> NSRect
-    {
+    nonisolated static func frame(
+        for expanded: Bool, current: NSRect, storedHeight: CGFloat? = nil, within visible: NSRect
+    ) -> NSRect {
+        let fallback = expanded ? expandedHeight : compactSize.height
+        // 記憶が無い場合も、展開なら現在より縮めない(中身が収まらなくなるため)
         let desired =
-            expanded
-            ? max(current.height, expandedHeight)
-            : min(current.height, compactSize.height)
+            storedHeight ?? (expanded ? max(current.height, fallback) : fallback)
         var frame = current
         let top = current.maxY
         frame.size.height = min(desired, max(minimumSize.height, visible.height))
