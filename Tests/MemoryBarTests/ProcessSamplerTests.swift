@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import TrueMem
+@testable import MemoryBar
 
 final class ProcessSamplerTests: XCTestCase {
 

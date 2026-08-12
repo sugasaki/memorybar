@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import TrueMem
+@testable import MemoryBar
 
 final class DisplayModeTests: XCTestCase {
     private func makeSnapshot(usedBytes: UInt64, totalBytes: UInt64) -> MemorySnapshot {

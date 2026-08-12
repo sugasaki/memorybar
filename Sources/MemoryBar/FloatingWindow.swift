@@ -71,7 +71,7 @@ struct FloatingContentView: View {
 final class FloatingWindowController {
     // テストや CLI から非 MainActor でも読めるようにする(値を持つだけで状態はない)
     nonisolated static let defaultsKey = "floatingWindowVisible"
-    nonisolated static let frameAutosaveName = "TrueMemFloatingWindow"
+    nonisolated static let frameAutosaveName = "MemoryBarFloatingWindow"
     /// 詳細の開閉状態。パネルとは別に持つ(常時表示と都度確認で役割が異なるため)
     nonisolated static let detailsExpandedKey = "floatingDetailsExpanded"
     /// 状態ごとの高さ。開閉を往復しても利用者が決めた大きさを失わないため

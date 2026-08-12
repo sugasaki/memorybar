@@ -5,9 +5,9 @@ import Foundation
 /// リポジトリが private のため認証が要るが、**アプリにトークンを持たせない**。
 /// 認証済みの `gh` CLI に委譲することで、資格情報の管理を GitHub CLI 側に任せる。
 enum Updater {
-    static let repository = "sugasaki/truemem"
+    static let repository = "sugasaki/memorybar"
     static let releaseTag = "latest"
-    static let assetName = "TrueMem.zip"
+    static let assetName = "MemoryBar.zip"
     /// gh の応答待ちの上限。無応答のまま状態が固まるのを防ぐ
     static let commandTimeout: TimeInterval = 60
 
@@ -19,7 +19,7 @@ enum Updater {
     /// 差し替え処理のログ。アプリ終了後に別プロセスが書くため、作業ディレクトリの外に置く
     static var installLogURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/TrueMem-update.log")
+            .appendingPathComponent("Library/Logs/MemoryBar-update.log")
     }
 
     struct ReleaseInfo: Sendable, Equatable {
@@ -77,7 +77,7 @@ enum Updater {
 
     /// Info.plist に埋め込まれた生の値。`<sha>-dirty` のこともあるため表示専用
     static var rawCommit: String? {
-        let value = Bundle.main.object(forInfoDictionaryKey: "TMSourceCommit") as? String
+        let value = Bundle.main.object(forInfoDictionaryKey: "MBSourceCommit") as? String
         return (value?.isEmpty ?? true) ? nil : value
     }
 
@@ -162,18 +162,18 @@ enum Updater {
         guard appURL.pathExtension == "app" else {
             throw UpdateError(
                 ".app バンドルとして起動していないため自動更新できません。",
-                recovery: "scripts/make-app.sh で生成した TrueMem.app から起動してください。")
+                recovery: "scripts/make-app.sh で生成した MemoryBar.app から起動してください。")
         }
         // Gatekeeper は検疫属性付きアプリを読み取り専用の場所へ隔離して起動する。
         // その状態では差し替えても次回起動に反映されない
         guard !appURL.path.contains("/AppTranslocation/") else {
             throw UpdateError(
                 "アプリが隔離された場所から実行されているため更新できません。",
-                recovery: "TrueMem.app を /Applications へ移動してから再度お試しください。")
+                recovery: "MemoryBar.app を /Applications へ移動してから再度お試しください。")
         }
 
         let workDir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("truemem-update-\(UUID().uuidString)")
+            .appendingPathComponent("memorybar-update-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
         // どの経路で失敗しても作業ディレクトリを残さない
         var installerLaunched = false
@@ -227,7 +227,7 @@ enum Updater {
         return appURL
     }
 
-    /// 差し替え前に、取得したバンドルが本当に「別ビルドの TrueMem」かを確認する。
+    /// 差し替え前に、取得したバンドルが本当に「別ビルドの MemoryBar」かを確認する。
     /// GitHub の targetCommitish はタグが既存だと更新されない仕様があるため、
     /// リリースのメタデータだけを信じると同じビルドを延々と再インストールしうる
     private static func verifyReplacement(newAppURL: URL, expectedCommit: String) throws {
@@ -242,10 +242,10 @@ enum Updater {
         let newIdentifier = info["CFBundleIdentifier"] as? String
         guard newIdentifier == Bundle.main.bundleIdentifier else {
             throw UpdateError(
-                "ダウンロードしたバンドルが TrueMem ではありません(\(newIdentifier ?? "不明"))。")
+                "ダウンロードしたバンドルが MemoryBar ではありません(\(newIdentifier ?? "不明"))。")
         }
 
-        let newCommit = (info["TMSourceCommit"] as? String).flatMap(normalizedCommit)
+        let newCommit = (info["MBSourceCommit"] as? String).flatMap(normalizedCommit)
         if let newCommit, let current = currentCommit, isSameCommit(newCommit, current) {
             throw UpdateError(
                 "配布されている版は現在と同じビルドでした。",
@@ -278,7 +278,7 @@ enum Updater {
 
             /bin/mkdir -p "$(/usr/bin/dirname "$LOG_PATH")"
             exec >>"$LOG_PATH" 2>&1
-            echo "=== TrueMem update $(/bin/date) ==="
+            echo "=== MemoryBar update $(/bin/date) ==="
 
             BACKUP_PATH=""
             rollback() {
@@ -325,7 +325,7 @@ enum Updater {
             # (trap を残すと再起動の失敗でロールバック扱いになり誤解を招く)
             trap - ERR
             if ! /usr/bin/open "$APP_PATH"; then
-                echo "再起動に失敗しました。手動で TrueMem を起動してください。"
+                echo "再起動に失敗しました。手動で MemoryBar を起動してください。"
             fi
             /bin/rm -rf "$WORK_DIR"
             """

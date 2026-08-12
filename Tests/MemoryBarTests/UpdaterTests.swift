@@ -1,9 +1,9 @@
 import XCTest
 
-@testable import TrueMem
+@testable import MemoryBar
 
 final class UpdaterTests: XCTestCase {
-    private func release(commit: String, assets: [String] = ["TrueMem.zip"]) -> Updater.ReleaseInfo
+    private func release(commit: String, assets: [String] = ["MemoryBar.zip"]) -> Updater.ReleaseInfo
     {
         Updater.ReleaseInfo(commit: commit, publishedAt: "2026-08-11T00:00:00Z", assetNames: assets)
     }
@@ -56,7 +56,7 @@ final class UpdaterTests: XCTestCase {
     }
 
     func testビルド元コミットが不明なら更新を促さない() {
-        // テスト実行時は .app ではないため TMSourceCommit を持たない。
+        // テスト実行時は .app ではないため MBSourceCommit を持たない。
         // 不明なまま更新を促すと、毎回更新ダイアログが出てしまう
         XCTAssertNil(Updater.currentCommit)
         XCTAssertFalse(Updater.isUpdateAvailable(release(commit: "abcdef0")))
@@ -269,10 +269,10 @@ final class UpdaterTests: XCTestCase {
     }
 
     func testダウンロードURLはリポジトリと一致する() {
-        XCTAssertEqual(Updater.repository, "sugasaki/truemem")
-        XCTAssertEqual(Updater.assetName, "TrueMem.zip")
+        XCTAssertEqual(Updater.repository, "sugasaki/memorybar")
+        XCTAssertEqual(Updater.assetName, "MemoryBar.zip")
         XCTAssertEqual(
             Updater.releaseURL.absoluteString,
-            "https://github.com/sugasaki/truemem/releases/latest")
+            "https://github.com/sugasaki/memorybar/releases/latest")
     }
 }
