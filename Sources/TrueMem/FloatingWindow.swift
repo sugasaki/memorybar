@@ -42,8 +42,10 @@ struct FloatingContentView: View {
         }
         .background(.regularMaterial)
         // 背景と同化して見失わないよう輪郭を明示する
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: MenuContentView.cornerRadius)
+                .strokeBorder(.separator, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: MenuContentView.cornerRadius))
         // タイトルバー領域を避けると上部に余白が残るため、全面に広げる
         .ignoresSafeArea()
         .onChange(of: isExpanded) { onDetailsToggled(isExpanded) }

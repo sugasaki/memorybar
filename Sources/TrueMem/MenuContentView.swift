@@ -12,8 +12,10 @@ struct MenuContentView: View {
     @State private var contentHeight: CGFloat = MenuContentView.fallbackPanelHeight
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
-    /// フローティングと揃えた角丸の半径
-    static let cornerRadius: CGFloat = 12
+    /// 角丸の半径。
+    /// システム描画時のパネルの角をピクセル単位で測ると 14pt だったが、
+    /// 他アプリのパネルはそれより丸く見えるとの指摘を受けて一段大きくしている
+    static let cornerRadius: CGFloat = 16
     /// 開閉状態の保存キー。テストからも参照できるよう定数にする
     static let detailsExpandedKey = "panelDetailsExpanded"
     static let settingsExpandedKey = "panelSettingsExpanded"
