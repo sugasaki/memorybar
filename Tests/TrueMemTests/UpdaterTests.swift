@@ -123,12 +123,12 @@ final class UpdaterTests: XCTestCase {
     }
 
     @MainActor
-    func test起動時の自動確認ではインストールが呼ばれない() async {
-        // Issue #22 の回帰防止。
-        // check() の成功分岐からインストールへ到達する経路を復活させると、このテストが落ちる
+    func test自動インストールが無効なら確認だけでインストールしない() async {
+        // Issue #22 の保証。設定をオフにしている限り、確認だけで適用されない
         let recorder = InstallRecorder()
         let controller = makeController(recorder)
         controller.automaticChecksEnabled = true
+        controller.automaticInstallEnabled = false
 
         controller.checkAtLaunchIfEnabled()
         await waitUntilSettled(controller)
@@ -138,9 +138,23 @@ final class UpdaterTests: XCTestCase {
     }
 
     @MainActor
+    func test自動インストールが有効なら確認だけで適用される() async {
+        // Issue #51 で利用者の指示により追加した挙動
+        let recorder = InstallRecorder()
+        let controller = makeController(recorder)
+        controller.automaticInstallEnabled = true
+
+        controller.check()
+        await waitUntilSettled(controller)
+
+        XCTAssertTrue(recorder.wasCalled, "自動インストールが有効なのに適用されなかった")
+    }
+
+    @MainActor
     func test明示的に呼んだときだけインストールされる() async {
         let recorder = InstallRecorder()
         let controller = makeController(recorder)
+        controller.automaticInstallEnabled = false
 
         controller.check()
         await waitUntilSettled(controller)
@@ -156,6 +170,7 @@ final class UpdaterTests: XCTestCase {
     func test自動確認が無効なら確認自体を行わない() async {
         let recorder = InstallRecorder()
         let controller = makeController(recorder)
+        controller.automaticInstallEnabled = false
         controller.automaticChecksEnabled = false
 
         controller.checkAtLaunchIfEnabled()
@@ -163,6 +178,13 @@ final class UpdaterTests: XCTestCase {
 
         XCTAssertEqual(controller.state, .idle)
         XCTAssertFalse(recorder.wasCalled)
+    }
+
+    @MainActor
+    func test定期確認の間隔は数時間おきである() {
+        // 頻繁に見に行くとネットワークと gh の起動が無駄に走る
+        XCTAssertGreaterThanOrEqual(UpdateController.periodicCheckInterval, 60 * 60)
+        XCTAssertLessThanOrEqual(UpdateController.periodicCheckInterval, 24 * 60 * 60)
     }
 
     @MainActor
