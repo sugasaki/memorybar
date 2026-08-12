@@ -7,15 +7,24 @@ struct MenuContentView: View {
     let updateController: UpdateController
     let floatingController: FloatingWindowController
     @State private var floatingVisible = false
-    @AppStorage("panelDetailsExpanded") private var detailsExpanded = false
-    @AppStorage("panelSettingsExpanded") private var settingsExpanded = false
+    @AppStorage(MenuContentView.detailsExpandedKey) private var detailsExpanded = false
+    @AppStorage(MenuContentView.settingsExpandedKey) private var settingsExpanded = false
     @State private var contentHeight: CGFloat = MenuContentView.fallbackPanelHeight
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
+    /// 開閉状態の保存キー。テストからも参照できるよう定数にする
+    static let detailsExpandedKey = "panelDetailsExpanded"
+    static let settingsExpandedKey = "panelSettingsExpanded"
     /// 画面に対して残す余白。メニューバーと画面端に食い込ませない
     private static let screenMargin: CGFloat = 120
-    /// 実測できるまでの高さ。潰れて見えないより、多少大きい方が害が小さい
-    static let fallbackPanelHeight: CGFloat = 620
+    /// 実測できるまでの高さ。既定はコンパクトなので、その実寸に近い値にしておく
+    static let fallbackPanelHeight: CGFloat = 240
+
+    /// 更新について利用者に伝えるべきことがあるか(更新あり・処理中・失敗)
+    private var needsUpdateAttention: Bool {
+        let state = updateController.state
+        return state.availableRelease != nil || state.isBusy || state.failureDetail != nil
+    }
 
     /// パネルの高さの上限。アプリ一覧や更新の詳細が加わると、
     /// 短い画面や拡大表示では画面高を超えて末尾が操作できなくなる
@@ -49,7 +58,11 @@ struct MenuContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let snapshot = monitor.snapshot {
                 // フローティングと同じ要約表示を使い、見た目を揃える
-                MemorySummaryView(snapshot: snapshot)
+                MemorySummaryView(snapshot: snapshot) {
+                    Image(systemName: "memorychip")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Divider()
                 DisclosureHeader(title: "詳細", isExpanded: $detailsExpanded)
                 if detailsExpanded {
@@ -63,13 +76,21 @@ struct MenuContentView: View {
                 Text("計測に失敗しました")
                     .foregroundStyle(.secondary)
             }
+            // 更新の状態は「設定」を畳んでいても見えるようにする。
+            // 中に隠すと、確認やインストールの失敗が利用者に伝わらない
+            if needsUpdateAttention {
+                Divider()
+                updates
+            }
             Divider()
             DisclosureHeader(title: "設定", isExpanded: $settingsExpanded)
             if settingsExpanded {
                 settings
                 floating
-                Divider()
-                updates
+                if !needsUpdateAttention {
+                    Divider()
+                    updates
+                }
             }
             Divider()
             footer

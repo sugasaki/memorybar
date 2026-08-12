@@ -2,8 +2,7 @@ import AppKit
 import SwiftUI
 
 /// フローティングウィンドウの内容。
-/// 常時表示に耐えるよう、要約と内訳の両方を1枚に収める。
-/// 高さが足りないときは内訳から順に省き、要約は必ず残す
+/// 既定は要約のみのコンパクト表示。「詳細」を開くと内訳とアプリ一覧が加わる
 struct FloatingContentView: View {
     let monitor: MemoryMonitor
     /// 閉じるボタンの動作。ウィンドウを隠すだけでなく設定も切り替える
@@ -19,8 +18,7 @@ struct FloatingContentView: View {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let snapshot = monitor.snapshot {
-                        MemorySummaryView(
-                            snapshot: snapshot, leadingAccessory: AnyView(closeButton))
+                        MemorySummaryView(snapshot: snapshot) { closeButton }
                         Divider()
                         DisclosureHeader(title: "詳細", isExpanded: $isExpanded)
                         if isExpanded {
@@ -159,33 +157,55 @@ final class FloatingWindowController {
             Self.moveToDefaultPosition(panel)
         }
         // 詳細を開いた状態で起動したとき、記憶した高さが足りないと中身が収まらない。
-        // 利用者が広げた高さは尊重したいので、足りないときだけ伸ばす
-        let requiredHeight =
-            UserDefaults.standard.bool(forKey: Self.detailsExpandedKey)
-            ? Self.expandedHeight : Self.compactSize.height
-        if panel.frame.height < requiredHeight {
-            var frame = panel.frame
-            let top = frame.maxY
-            frame.size.height = requiredHeight
-            frame.origin.y = top - requiredHeight
-            panel.setFrame(frame, display: false)
+        // 折りたたみ状態では記憶した高さをそのまま使う(利用者の選択を壊さない)
+        if UserDefaults.standard.bool(forKey: Self.detailsExpandedKey) {
+            let visible = Self.visibleFrame(containing: panel.frame)
+            panel.setFrame(
+                Self.frame(for: true, current: panel.frame, within: visible), display: false)
         }
         panel.orderFrontRegardless()
         self.panel = panel
     }
 
-    /// 詳細の開閉に合わせて高さを変える。上端を固定して下方向へ伸ばす
+    /// 詳細の開閉に合わせて高さを変える
     private func resizeForDetails(expanded: Bool) {
         guard let panel else { return }
-        let targetHeight =
+        let visible = Self.visibleFrame(containing: panel.frame)
+        let target = Self.frame(for: expanded, current: panel.frame, within: visible)
+        // animate: true は表示中のウィンドウで約0.35秒メインスレッドを止め、
+        // その間 1秒更新もメニューバーの文字列も停止するため使わない
+        panel.setFrame(target, display: true)
+    }
+
+    /// 開閉後のフレームを求める。
+    ///
+    /// - 上端を固定して下方向へ伸縮する(置いた位置がずれないようにする)
+    /// - 展開時は縮めない。利用者が広げた高さを開閉で失わないため
+    /// - 画面の可視領域からはみ出さないよう収める。AppKit の自動補正は
+    ///   上端しか守らないため、下端は自分で見る必要がある
+    nonisolated static func frame(for expanded: Bool, current: NSRect, within visible: NSRect)
+        -> NSRect
+    {
+        let desired =
             expanded
-            ? Self.expandedHeight
-            : Self.compactSize.height
-        var frame = panel.frame
-        let top = frame.maxY
-        frame.size.height = targetHeight
-        frame.origin.y = top - targetHeight
-        panel.setFrame(frame, display: true, animate: true)
+            ? max(current.height, expandedHeight)
+            : min(current.height, compactSize.height)
+        var frame = current
+        let top = current.maxY
+        frame.size.height = min(desired, max(minimumSize.height, visible.height))
+        frame.origin.y = top - frame.size.height
+        if frame.minY < visible.minY { frame.origin.y = visible.minY }
+        if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.size.height }
+        return frame
+    }
+
+    /// ウィンドウが最も重なっている画面の可視領域
+    nonisolated static func visibleFrame(containing frame: NSRect) -> NSRect {
+        let screen =
+            NSScreen.screens.max {
+                $0.visibleFrame.intersection(frame).area < $1.visibleFrame.intersection(frame).area
+            } ?? NSScreen.main
+        return screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
     }
 
     /// 見失ったときに呼び出して、既定のサイズと位置へ引き戻す
@@ -213,4 +233,9 @@ final class FloatingWindowController {
                 x: visible.maxX - panel.frame.width - 24,
                 y: visible.maxY - panel.frame.height - 24))
     }
+}
+
+extension NSRect {
+    /// 重なりの大きさ比較用。空の交差は 0 になる
+    fileprivate var area: CGFloat { isEmpty ? 0 : width * height }
 }

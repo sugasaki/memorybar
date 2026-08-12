@@ -1,38 +1,40 @@
 import SwiftUI
 
-/// メモリプレッシャーに対応する色。表示面ごとにばらつかないよう一箇所で決める
-func pressureColor(_ pressure: MemoryPressure) -> Color {
-    switch pressure {
-    case .normal: .green
-    case .warning: .yellow
-    case .critical: .red
-    case .unknown: .gray
+extension MemoryPressure {
+    /// 表示面ごとにばらつかないよう、色は一箇所で決める
+    var color: Color {
+        switch self {
+        case .normal: .green
+        case .warning: .yellow
+        case .critical: .red
+        case .unknown: .gray
+        }
     }
 }
 
 /// 要約表示。残容量を大きく出し、離れていても一目で読めることを優先する。
 /// メニューパネルとフローティングウィンドウで共用し、見た目を揃える
-struct MemorySummaryView: View {
+struct MemorySummaryView<Accessory: View>: View {
     let snapshot: MemorySnapshot
-    /// 見出しの左に置く要素(フローティングでは閉じるボタン)
-    var leadingAccessory: AnyView?
+    /// 見出しの左に置く要素(パネルではアイコン、フローティングでは閉じるボタン)。
+    /// AnyView で型消去するとビューの同一性が失われ差分更新が効かないため、型で受ける
+    private let accessory: Accessory
+
+    init(snapshot: MemorySnapshot, @ViewBuilder accessory: () -> Accessory) {
+        self.snapshot = snapshot
+        self.accessory = accessory()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                if let leadingAccessory {
-                    leadingAccessory
-                } else {
-                    Image(systemName: "memorychip")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                accessory
                 Text("TrueMem")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Circle()
-                    .fill(pressureColor(snapshot.pressure))
+                    .fill(snapshot.pressure.color)
                     .frame(width: 9, height: 9)
                 Text(snapshot.pressure.label)
                     .font(.caption)
@@ -64,6 +66,14 @@ struct MemoryDetailsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            // アクティビティモニタとの突き合わせに使う2値。内訳だけだと照合できない
+            HStack {
+                Text("使用済みメモリ")
+                Spacer(minLength: 8)
+                Text(MemoryFormat.detail(snapshot.used))
+                    .monospacedDigit()
+            }
+            .font(.callout.weight(.semibold))
             ForEach(MemoryComposition.segments(of: snapshot)) { segment in
                 HStack(spacing: 6) {
                     RoundedRectangle(cornerRadius: 2)
@@ -84,6 +94,14 @@ struct MemoryDetailsView: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 Text(MemoryFormat.detail(snapshot.swapUsed))
+                    .monospacedDigit()
+            }
+            .font(.callout)
+            HStack {
+                Text("物理メモリ")
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text(MemoryFormat.detail(snapshot.total))
                     .monospacedDigit()
             }
             .font(.callout)
