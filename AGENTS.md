@@ -1,10 +1,10 @@
-# TrueMem — AI エージェント向けガイド
+# MemoryBar — AI エージェント向けガイド
 
 このリポジトリで作業するすべての AI エージェント向けのガイド（特定製品に依存せず、`AGENTS.md` を読むエージェントすべてが対象。Claude Code / Codex / opencode / GLM / Cursor / Gemini など）。
 **このファイルが正本**。`CLAUDE.md` は Claude Code 用の参照スタブで、中身はここに集約する。
 
 ## プロジェクト概要
-TrueMem — macOS のメニューバーに常駐し、メモリの残量・使用量をリアルタイム表示するネイティブアプリ。
+MemoryBar — macOS のメニューバーに常駐し、メモリの残量・使用量をリアルタイム表示するネイティブアプリ。
 **アクティビティモニタと同じデータソース（Mach API `host_statistics64`）・同じ計算式**で正確な値を表示することが最重要の要件。
 
 - 未使用 = `free_count − speculative` / 残容量 = 未使用 + キャッシュされたファイル（external + purgeable）/ 使用済み = 物理メモリ − 残容量
@@ -31,7 +31,7 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
 
 ## ファイル構成
 - `Package.swift` — SPM マニフェスト
-- `Sources/TrueMem/`
+- `Sources/MemoryBar/`
   - `App.swift` — エントリポイント（`MenuBarExtra`・アクセサリ化）
   - `MemorySampler.swift` — Mach / sysctl からの計測（副作用はここに隔離）
   - `MemorySnapshot.swift` — 計測値から使用量・残量を導出する純粋ロジック
@@ -40,12 +40,12 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - `Updater.swift` — GitHub Releases からの更新確認・適用（`gh` CLI に認証を委譲）
   - `UpdateController.swift` — 更新の進行状態と確認ダイアログ
 - `Sources/CMachSupport/` — Swift へ import できない Mach 定数を公開する最小 C shim
-- `Tests/TrueMemTests/` — ユニットテスト（純粋ロジック + 実機サンプリング・Mach ポートリーク回帰）
+- `Tests/MemoryBarTests/` — ユニットテスト（純粋ロジック + 実機サンプリング・Mach ポートリーク回帰）
 - `scripts/make-app.sh` — .app バンドル生成スクリプト
 
 ## 開発パターン
 - **計算ロジックと計測を分離する**: Mach API 呼び出し（`MemorySampler`）と数値の導出（`MemorySnapshot`）を分け、導出側は生のページカウントを受け取る純粋関数としてテストする
-- **値の正確性が最優先**: 表示値の計算式を変更する場合は、アクティビティモニタの表示と突き合わせて検証する（`swift run truemem --print` で1回分のサンプルを標準出力に出せる）
+- **値の正確性が最優先**: 表示値の計算式を変更する場合は、アクティビティモニタの表示と突き合わせて検証する（`swift run memorybar --print` で1回分のサンプルを標準出力に出せる）
 - ページサイズは `vm_kernel_page_size` を使う（`vm_statistics64` のカウントはカーネルページ単位。Apple Silicon は 16KB。4096 をハードコードしない）
 - **Mach ポート規律**: `mach_host_self()` 等で得た送信権は、**同一スコープの `defer`** で必ず `mach_port_deallocate` する。解放しないと上限（65535）まで蓄積する規約違反になる。回帰テスト `MemorySamplerTests` は成功パスしか通らないため、各 return 直前で解放する形にすると早期 return のリークを検出できなくなる
 - メモリプレッシャーの状態遷移は公開 API の `DispatchSource` を中心にし、非公開 sysctl を使う場合は小さな互換レイヤーへ隔離して失敗を `.unknown` として扱う
@@ -56,15 +56,15 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
 - **配布と自動アップデート**: リポジトリは private のまま、`main` への push で GitHub Actions が Universal ビルドを `latest` リリースへ公開する（`.github/workflows/release.yml`）
   - **アプリにトークンを埋め込まない**。認証は利用者の `gh` CLI に委譲する（Sparkle は appcast 取得に認証が要るため private では使わない）
   - **GUI から起動した .app は PATH を継承しない**（Finder 起動時は `/usr/bin:/bin:/usr/sbin:/sbin` のみ）。`gh` などの外部コマンドは既定パスを明示的に探索する
-  - 更新判定は `make-app.sh` が Info.plist へ埋め込む `TMSourceCommit` とリリースの `targetCommitish` の比較で行う。**判定不能なときは更新を促さない**（ビルド元コミットが不明、`targetCommitish` がブランチ名など）。判定不能なまま促すと同じビルドの更新を延々と繰り返す
+  - 更新判定は `make-app.sh` が Info.plist へ埋め込む `MBSourceCommit` とリリースの `targetCommitish` の比較で行う。**判定不能なときは更新を促さない**（ビルド元コミットが不明、`targetCommitish` がブランチ名など）。判定不能なまま促すと同じビルドの更新を延々と繰り返す
   - **`MenuBarExtra` のパネルはウィンドウの大きさを内容の固有サイズから決める**。`ScrollView` で包んで高さを実測・指定するとウィンドウと内容が別々に決まり、潰れたり(#41)差分が露出したり(#55)する。内容の自然な大きさに任せること
 - **バージョンは Git タグ(`vX.Y.Z`)が唯一の出所**。CI が main へのマージごとにパッチ番号を進めてタグを打つ。`VERSION` のようなファイルを CI が書き換えて push する方式は、無限ループ回避やローカルとの乖離といった問題を招くため使わない
-  - **未コミットの変更を含むビルドには `TMSourceCommit` へ `-dirty` を付ける**。HEAD をそのまま刻むと、実際には別物なのに「そのコミットのリリース版」を名乗ってしまう（実際にレビューで前提を誤らせた）。SHA として不正な値になるため更新判定からも自動的に外れる
-  - GitHub API は**タグが既存だと `target_commitish` を無視する**ため、リリースは `edit` せず毎回タグごと作り直す。加えて差し替え直前に新バンドルの `TMSourceCommit` と `CFBundleIdentifier` を検証する（API の仕様に依存しない歯止め）
+  - **未コミットの変更を含むビルドには `MBSourceCommit` へ `-dirty` を付ける**。HEAD をそのまま刻むと、実際には別物なのに「そのコミットのリリース版」を名乗ってしまう（実際にレビューで前提を誤らせた）。SHA として不正な値になるため更新判定からも自動的に外れる
+  - GitHub API は**タグが既存だと `target_commitish` を無視する**ため、リリースは `edit` せず毎回タグごと作り直す。加えて差し替え直前に新バンドルの `MBSourceCommit` と `CFBundleIdentifier` を検証する（API の仕様に依存しない歯止め）
   - **差し替えは「退避 → 展開 → 削除」で置換する**。`ditto` は既存バンドルへマージするため、そのまま上書きすると旧版のファイルが残り署名シールが壊れる
-  - 差し替えスクリプトは失敗時に必ず旧バンドルへロールバックし、アプリを再起動する（黙って消えるのが最悪の失敗）。ログは `~/Library/Logs/TrueMem-update.log`
+  - 差し替えスクリプトは失敗時に必ず旧バンドルへロールバックし、アプリを再起動する（黙って消えるのが最悪の失敗）。ログは `~/Library/Logs/MemoryBar-update.log`
   - **インストールの同意はメニューパネルのボタン操作で取る**。メニューバー常駐（`.accessory`）アプリでは `NSAlert.runModal()` が操作を待たずに先頭ボタンの応答を返すことがあり、同意の確認手段として使えない（Issue #22 で実際に無操作のまま自動インストールされた）。更新確認とインストールは必ず分けること
-  - 動作確認は `dist/TrueMem.app/Contents/MacOS/truemem --check-update`（インストールはしない）と `--install-update`（実際に適用する）。`swift run` では `.app` でないため更新判定まで確認できない
+  - 動作確認は `dist/MemoryBar.app/Contents/MacOS/memorybar --check-update`（インストールはしない）と `--install-update`（実際に適用する）。`swift run` では `.app` でないため更新判定まで確認できない
 
 ## 開発規約
 

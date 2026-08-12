@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "truemem",
+    name: "memorybar",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "truemem", targets: ["TrueMem"])
+        .executable(name: "memorybar", targets: ["MemoryBar"])
     ],
     targets: [
         .target(
@@ -14,14 +14,14 @@ let package = Package(
             publicHeadersPath: "include"
         ),
         .executableTarget(
-            name: "TrueMem",
+            name: "MemoryBar",
             dependencies: ["CMachSupport"],
-            path: "Sources/TrueMem"
+            path: "Sources/MemoryBar"
         ),
         .testTarget(
-            name: "TrueMemTests",
-            dependencies: ["TrueMem"],
-            path: "Tests/TrueMemTests"
+            name: "MemoryBarTests",
+            dependencies: ["MemoryBar"],
+            path: "Tests/MemoryBarTests"
         ),
     ]
 )

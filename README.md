@@ -1,6 +1,6 @@
-<img src="docs/icon.png" width="128" align="right" alt="TrueMem のアイコン">
+<img src="docs/icon.png" width="128" align="right" alt="MemoryBar のアイコン">
 
-# TrueMem
+# MemoryBar
 
 macOSのメニューバーに常駐し、メモリの残容量・使用量をアクティビティモニタと同じ計算式でリアルタイム表示するアプリ。
 
@@ -15,7 +15,7 @@ macOSのメニューバーに常駐し、メモリの残容量・使用量をア
 
 ## インストール
 
-**[TrueMem.zip](https://github.com/sugasaki/truemem/releases/latest/download/TrueMem.zip)** をダウンロードし、展開して `TrueMem.app` を `/Applications` に置く。
+**[MemoryBar.zip](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)** をダウンロードし、展開して `MemoryBar.app` を `/Applications` に置く。
 
 - privateリポジトリのため、GitHubにログインした状態で開くこと
 - Apple SiliconとIntelの両方で動くUniversalビルド。`main`への変更ごとにGitHub Actionsが自動で更新する
@@ -25,9 +25,9 @@ macOSのメニューバーに常駐し、メモリの残容量・使用量をア
 
 ad-hoc署名のため、**ブラウザでダウンロードした場合のみ**macOSが初回起動をブロックする。次のいずれかで許可する。
 
-- `TrueMem.app` を右クリック →「開く」→ ダイアログで「開く」
+- `MemoryBar.app` を右クリック →「開く」→ ダイアログで「開く」
 - 「システム設定 > プライバシーとセキュリティ」の「このまま開く」
-- `xattr -dr com.apple.quarantine /Applications/TrueMem.app`
+- `xattr -dr com.apple.quarantine /Applications/MemoryBar.app`
 
 2回目以降は不要。アプリ内の更新は `gh` 経由で取得するため検疫属性が付かず、警告は出ない。
 
@@ -38,7 +38,7 @@ ad-hoc署名のため、**ブラウザでダウンロードした場合のみ**m
 - 「更新を自動でインストール」をオフにすると、更新があってもパネルに表示するだけになり、「インストールして再起動」を押したときにだけ適用する
 - 「定期的に自動で確認」をオフにすると自動確認そのものを止められる
 - パネルの「更新を確認」でいつでも手動確認できる
-- ログは `~/Library/Logs/TrueMem-update.log`
+- ログは `~/Library/Logs/MemoryBar-update.log`
 
 privateリポジトリのため認証が要るが、**アプリはトークンを保持しない**。認証済みの [GitHub CLI](https://cli.github.com/) に委譲するので、次が前提になる。
 
@@ -68,7 +68,7 @@ gh auth login
 
 **アクティビティモニタとの差は0.15GB程度残る。** 使用済みメモリは1秒で最大0.16GB動くため、採取時刻の差がそのまま出る。アクティビティモニタ側も「使用済み+キャッシュ>物理メモリ」となる瞬間があり、その表示が単一時点のものではないため、これ以上の一致は原理的に難しい。内訳(アプリ/確保済み/圧縮/キャッシュ/スワップ)は完全に一致する。
 
-計算式の検証記録は [Issue #24](https://github.com/sugasaki/truemem/issues/24) を参照。
+計算式の検証記録は [Issue #24](https://github.com/sugasaki/memorybar/issues/24) を参照。
 
 ### 使用量の多いアプリ
 
@@ -96,7 +96,7 @@ swift run              # そのまま実行(メニューバーに常駐)
 scripts/make-app.sh                                   # 自アーキテクチャのみ(高速)
 UNIVERSAL=1 scripts/make-app.sh                       # arm64 + x86_64(配布用)
 APP_VERSION=0.9.9 APP_BUILD=42 scripts/make-app.sh    # バージョンを明示指定
-cp -R dist/TrueMem.app /Applications/
+cp -R dist/MemoryBar.app /Applications/
 ```
 
 生成物はad-hoc署名。第三者へ配布する場合はDeveloper ID Application証明書での署名とnotarizationが別途必要。
@@ -105,7 +105,7 @@ cp -R dist/TrueMem.app /Applications/
 
 **Git タグ(`vX.Y.Z`)が唯一の出所**。`main` へマージするたびにCIがパッチ番号を進めてタグを打つため、手で管理する必要はない。メジャー・マイナーを上げたいときは、Releaseワークフローを手動実行してバージョンを指定する。
 
-手元ビルドでは「いま出ている最新のタグ」を表示する(次の番号を騙らない)。未コミットの変更を含むビルドは `TMSourceCommit` に `-dirty` が付き、更新判定から外れる。
+手元ビルドでは「いま出ている最新のタグ」を表示する(次の番号を騙らない)。未コミットの変更を含むビルドは `MBSourceCommit` に `-dirty` が付き、更新判定から外れる。
 
 ### アイコン
 
@@ -118,15 +118,21 @@ cp -R dist/TrueMem.app /Applications/
 `.app` 内の実行ファイルを直接起動する(`swift run` では `.app` でないため更新判定まで確認できない)。
 
 ```sh
-dist/TrueMem.app/Contents/MacOS/truemem --print           # 1回分のサンプルを出力
-dist/TrueMem.app/Contents/MacOS/truemem --apps            # 使用量の多いアプリを出力
-dist/TrueMem.app/Contents/MacOS/truemem --check-update    # 更新確認のみ
-/Applications/TrueMem.app/Contents/MacOS/truemem --install-update   # 実際に適用
+dist/MemoryBar.app/Contents/MacOS/memorybar --print           # 1回分のサンプルを出力
+dist/MemoryBar.app/Contents/MacOS/memorybar --apps            # 使用量の多いアプリを出力
+dist/MemoryBar.app/Contents/MacOS/memorybar --check-update    # 更新確認のみ
+/Applications/MemoryBar.app/Contents/MacOS/memorybar --install-update   # 実際に適用
 ```
 
-`--install-update` は常駐中に実行すると動作中のバンドルを置き換えてしまうため、**TrueMemが起動中は拒否される**。先に終了しておく。
+`--install-update` は常駐中に実行すると動作中のバンドルを置き換えてしまうため、**MemoryBarが起動中は拒否される**。先に終了しておく。
+
+## 名前について
+
+旧称は TrueMem。「正確な値を出す」という開発上の主張が名前になっており、使う人の視点ではなかったため MemoryBar に改めた(2026-08、[Issue #61](https://github.com/sugasaki/memorybar/issues/61))。
+
+Spotlight は前方一致が強いため、先頭が `Memory` だと「Memory」と打った時点で候補に出る。表記は空白なしに統一している(パスやURLに空白が入るのを避けるため)。
 
 ## 開発
 
 - 開発規約と実装上の注意: [AGENTS.md](AGENTS.md)([agent-project-template](https://github.com/sugasaki/agent-project-template)ベース)
-- 設計判断の記録: [Wiki](https://github.com/sugasaki/truemem/wiki)(メモリ解放機能を実装しない判断、UI実装でつまずいた点)
+- 設計判断の記録: [Wiki](https://github.com/sugasaki/memorybar/wiki)(メモリ解放機能を実装しない判断、UI実装でつまずいた点)

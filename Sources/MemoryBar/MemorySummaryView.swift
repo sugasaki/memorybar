@@ -29,7 +29,7 @@ struct MemorySummaryView<Accessory: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 accessory
-                Text("TrueMem")
+                Text("MemoryBar")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)

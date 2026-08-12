@@ -1,7 +1,7 @@
 import AppKit
 import XCTest
 
-@testable import TrueMem
+@testable import MemoryBar
 
 @MainActor
 final class FloatingWindowTests: XCTestCase {

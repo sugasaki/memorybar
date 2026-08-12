@@ -46,7 +46,7 @@ enum Main {
             installUpdateFromCLI()
             return
         }
-        TrueMemApp.main()
+        MemoryBarApp.main()
     }
 
     private static func installUpdateFromCLI() {
@@ -57,8 +57,8 @@ enum Main {
             FileHandle.standardError.write(
                 Data(
                     """
-                    TrueMem が起動中のため実行できません (pid=\(running))。
-                    メニューの「インストールして再起動」を使うか、先に TrueMem を終了してください。
+                    MemoryBar が起動中のため実行できません (pid=\(running))。
+                    メニューの「インストールして再起動」を使うか、先に MemoryBar を終了してください。
 
                     """.utf8))
             exit(1)
@@ -261,7 +261,7 @@ final class MemoryMonitor {
     }
 }
 
-struct TrueMemApp: App {
+struct MemoryBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var monitor: MemoryMonitor
     @State private var updateController = UpdateController.shared

@@ -2,7 +2,7 @@ import CMachSupport
 import Darwin
 import XCTest
 
-@testable import TrueMem
+@testable import MemoryBar
 
 /// 実機サンプリングの検証(CIのmacOSランナーでも実行される)
 final class MemorySamplerTests: XCTestCase {
@@ -64,14 +64,14 @@ final class MemorySamplerTests: XCTestCase {
     func testHOST_VM_INFO64_COUNTは構造体サイズと整合する() {
         let sizeBased = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
-        XCTAssertEqual(truemem_host_vm_info64_count(), sizeBased)
+        XCTAssertEqual(memorybar_host_vm_info64_count(), sizeBased)
     }
 
     /// ページサイズは全計算の乗数なので、取り違えると全ての表示値が定数倍ずれる。
     /// 定数同士の比較(host_page_size は実装上 vm_kernel_page_size を返すため常に真)ではなく、
     /// 本番経路の値がカーネルページ単位に整合しているかを検証する
     func testサンプリング結果がカーネルページサイズと整合する() throws {
-        let pageSize = UInt64(truemem_kernel_page_size())
+        let pageSize = UInt64(memorybar_kernel_page_size())
         XCTAssertGreaterThan(pageSize, 0)
 
         let snapshot = try XCTUnwrap(MemorySampler.sample())

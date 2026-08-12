@@ -5,9 +5,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-APP_NAME="TrueMem"
-BUNDLE_ID="com.sugasaki.truemem"
-EXECUTABLE="truemem"
+APP_NAME="MemoryBar"
+BUNDLE_ID="com.sugasaki.memorybar"
+EXECUTABLE="memorybar"
 # バージョンは Git タグ(vX.Y.Z)を唯一の出所にする。
 # CI がリリースのたびにタグを打つので、ファイルを書き換えて push する必要がない。
 # 手元ビルドでは「いま出ている最新のタグ」を表示する(次の番号を騙らない)
@@ -104,7 +104,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 	<string>$APP_VERSION</string>
 	<key>CFBundleVersion</key>
 	<string>$APP_BUILD</string>
-	<key>TMSourceCommit</key>
+	<key>MBSourceCommit</key>
 	<string>$APP_COMMIT</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>

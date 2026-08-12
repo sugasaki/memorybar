@@ -14,7 +14,7 @@ enum MemorySampler {
         defer { mach_port_deallocate(mach_task_self_, host) }
 
         var stats = vm_statistics64_data_t()
-        var count = truemem_host_vm_info64_count()
+        var count = memorybar_host_vm_info64_count()
         let result = withUnsafeMutablePointer(to: &stats) { pointer in
             pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 host_statistics64(host, HOST_VM_INFO64, $0, &count)
@@ -28,7 +28,7 @@ enum MemorySampler {
             totalBytes: total,
             // vm_statistics64のページカウントはカーネルページ単位。
             // host_page_sizeと同値だがホストポートを要さず、単位としてこちらが正しい
-            pageSize: UInt64(truemem_kernel_page_size()),
+            pageSize: UInt64(memorybar_kernel_page_size()),
             internalPages: UInt64(stats.internal_page_count),
             purgeablePages: UInt64(stats.purgeable_count),
             wiredPages: UInt64(stats.wire_count),

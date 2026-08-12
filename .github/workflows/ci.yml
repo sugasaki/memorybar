@@ -16,20 +16,20 @@ jobs:
       # テストには実機サンプリング検証とMachポートリークの回帰テストを含む
       - run: swift test
       - name: 実機サンプリングのスモークテスト
-        run: swift run truemem --print
+        run: swift run memorybar --print
       - name: .appバンドル生成と検証
         run: |
           APP_VERSION=0.1.0 APP_BUILD=1 scripts/make-app.sh
-          plutil -lint "dist/TrueMem.app/Contents/Info.plist"
-          test "$(plutil -extract CFBundleShortVersionString raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "0.1.0"
-          test "$(plutil -extract CFBundleVersion raw -o - "dist/TrueMem.app/Contents/Info.plist")" = "1"
+          plutil -lint "dist/MemoryBar.app/Contents/Info.plist"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "dist/MemoryBar.app/Contents/Info.plist")" = "0.1.0"
+          test "$(plutil -extract CFBundleVersion raw -o - "dist/MemoryBar.app/Contents/Info.plist")" = "1"
           # クリーンな checkout なのに dirty 判定されたら、判定条件が壊れている
-          embedded="$(plutil -extract TMSourceCommit raw -o - "dist/TrueMem.app/Contents/Info.plist")"
-          echo "TMSourceCommit=$embedded"
+          embedded="$(plutil -extract MBSourceCommit raw -o - "dist/MemoryBar.app/Contents/Info.plist")"
+          echo "MBSourceCommit=$embedded"
           case "$embedded" in
             *-dirty) echo "クリーンな作業ツリーなのに -dirty が付いた"; exit 1 ;;
           esac
-          codesign --verify --deep --strict "dist/TrueMem.app"
+          codesign --verify --deep --strict "dist/MemoryBar.app"
           # --verify は未署名なら失敗するが署名の種別までは表明しないため、
           # ad-hoc 署名が実際に付いていることをアサートする
-          codesign -dv --verbose=4 "dist/TrueMem.app" 2>&1 | grep -q "Signature=adhoc"
+          codesign -dv --verbose=4 "dist/MemoryBar.app" 2>&1 | grep -q "Signature=adhoc"
