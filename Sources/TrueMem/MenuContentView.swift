@@ -57,12 +57,10 @@ struct MenuContentView: View {
             if height > 0 { contentHeight = height }
         }
         // 角丸をシステムの描画に任せると環境によって四角くなる(Issue #45)。
-        // フローティングと同じく自前で描き、見た目も揃える
+        // ただし SwiftUI 側で形を描くとシステムの縁と二重になる(Issue #49)。
+        // 縁を1本にするため、ウィンドウのレイヤー側だけで丸める
         .background(.regularMaterial)
-        .overlay(RoundedRectangle(cornerRadius: Self.cornerRadius).strokeBorder(.separator, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
-        // ホスト側のウィンドウが四角い背景を塗ると角丸が隠れるため透明にする
-        .background(TransparentWindowBackground())
+        .background(RoundedWindowBackground(cornerRadius: Self.cornerRadius))
     }
 
     private var content: some View {
@@ -216,24 +214,34 @@ private struct PanelContentHeightKey: PreferenceKey {
     }
 }
 
-/// ホストしているウィンドウの背景を透明にする。
-/// MenuBarExtra のパネルは環境によって四角い不透明背景を塗ることがあり、
-/// そのままだと自前で描いた角丸が隠れてしまう(Issue #45)
-private struct TransparentWindowBackground: NSViewRepresentable {
+/// ホストしているウィンドウを透明にし、角丸マスクを適用する。
+///
+/// SwiftUI 側で `clipShape` と `strokeBorder` を重ねると、システムが描く縁と
+/// 二重の輪郭になる(Issue #49)。レイヤー側だけで丸めることで縁を1本にする
+private struct RoundedWindowBackground: NSViewRepresentable {
+    let cornerRadius: CGFloat
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         // ビュー階層に入るまで window は nil のため、次のループで適用する
-        DispatchQueue.main.async { Self.makeTransparent(view.window) }
+        DispatchQueue.main.async { apply(to: view.window) }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        Self.makeTransparent(nsView.window)
+        apply(to: nsView.window)
     }
 
-    private static func makeTransparent(_ window: NSWindow?) {
+    private func apply(to window: NSWindow?) {
         guard let window else { return }
         window.isOpaque = false
         window.backgroundColor = .clear
+        window.hasShadow = true
+        guard let contentView = window.contentView else { return }
+        contentView.wantsLayer = true
+        contentView.layer?.cornerRadius = cornerRadius
+        contentView.layer?.masksToBounds = true
+        // 角の曲がり方をシステムの窓と揃える
+        contentView.layer?.cornerCurve = .continuous
     }
 }
