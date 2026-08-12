@@ -16,6 +16,8 @@ extension MemoryPressure {
 /// メニューパネルとフローティングウィンドウで共用し、見た目を揃える
 struct MemorySummaryView<Accessory: View>: View {
     let snapshot: MemorySnapshot
+    /// 選んだ値をメニューバーと同じように出す(Issue #63)
+    @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
     /// 見出しの左に置く要素(パネルではアイコン、フローティングでは閉じるボタン)。
     /// AnyView で型消去するとビューの同一性が失われ差分更新が効かないため、型で受ける
     private let accessory: Accessory
@@ -23,6 +25,10 @@ struct MemorySummaryView<Accessory: View>: View {
     init(snapshot: MemorySnapshot, @ViewBuilder accessory: () -> Accessory) {
         self.snapshot = snapshot
         self.accessory = accessory()
+    }
+
+    private var displayMode: DisplayMode {
+        DisplayMode(rawValue: displayModeRaw) ?? .default
     }
 
     var body: some View {
@@ -41,16 +47,16 @@ struct MemorySummaryView<Accessory: View>: View {
                     .foregroundStyle(.secondary)
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(MemoryFormat.detail(snapshot.available))
+                Text(displayMode.primaryText(for: snapshot))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
-                Text("空き")
+                Text(displayMode.primaryCaption)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Text("\(Int((snapshot.usedFraction * 100).rounded()))%")
+                Text(displayMode.secondaryText(for: snapshot))
                     .font(.title3.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
