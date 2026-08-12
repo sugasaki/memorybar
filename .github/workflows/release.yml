@@ -19,15 +19,48 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
+        with:
+          # タグからバージョンを決めるため、履歴とタグをすべて取得する
+          fetch-depth: 0
+
+      - name: 次のバージョンを決める
+        id: version
+        run: |
+          # このコミットに既にタグがあれば、それを尊重する
+          # (メジャー・マイナーを上げたいときは手でタグを打てばよい)
+          if exact="$(git describe --tags --match 'v[0-9]*' --exact-match 2>/dev/null)"; then
+            version="${exact#v}"
+            echo "既存のタグ $exact を使用します"
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            latest="$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || echo v0.0.0)"
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            version="${major}.${minor}.$((patch + 1))"
+            echo "$latest → v$version"
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Universal バイナリで .app を生成
         env:
           # 更新判定はこのコミットSHAで行う
           APP_COMMIT: ${{ github.sha }}
           UNIVERSAL: "1"
-          # APP_VERSION は VERSION ファイルから取る。ビルド番号は実行回数を使う
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          # ビルド番号は実行回数を使う
           APP_BUILD: ${{ github.run_number }}
         run: scripts/make-app.sh
+
+      - name: バージョンのタグを打つ
+        if: steps.version.outputs.tag_exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # コミットを作らずタグだけを push する。CI が main を書き換えないので
+          # 無限ループやローカルとの乖離が起きない
+          gh api --method POST /repos/${{ github.repository }}/git/refs \
+            -f ref="refs/tags/v${{ steps.version.outputs.version }}" \
+            -f sha="${{ github.sha }}"
 
       - name: Universal になっていることを確認
         run: |
@@ -40,6 +73,10 @@ jobs:
           embedded=$(/usr/libexec/PlistBuddy -c "Print :TMSourceCommit" dist/TrueMem.app/Contents/Info.plist)
           echo "embedded=$embedded"
           test "$embedded" = "${{ github.sha }}"
+          # バージョンが意図した値で埋め込まれているか
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" dist/TrueMem.app/Contents/Info.plist)
+          echo "version=$version"
+          test "$version" = "${{ steps.version.outputs.version }}"
 
       - name: zip に固める
         run: ditto -c -k --keepParent dist/TrueMem.app dist/TrueMem.zip
@@ -49,7 +86,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > release-notes.md <<EOF
-          \`${GITHUB_SHA}\` からの自動ビルドです。
+          **v${{ steps.version.outputs.version }}** (\`${GITHUB_SHA}\` からの自動ビルド)
 
           [TrueMem.zip](https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/TrueMem.zip) をダウンロードし、展開して \`TrueMem.app\` を \`/Applications\` に置いてください。
 

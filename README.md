@@ -85,7 +85,9 @@ APP_VERSION=0.9.9 APP_BUILD=42 scripts/make-app.sh    # バージョンを明示
 cp -R dist/TrueMem.app /Applications/
 ```
 
-バージョンはリポジトリ直下の `VERSION` を唯一の出所とし、リリースビルドと手元ビルドで食い違わないようにしている。未コミットの変更を含むビルドは `TMSourceCommit` に `-dirty` が付き、更新判定から外れる。
+バージョンは **Git タグ(`vX.Y.Z`)を唯一の出所**としている。`main` へマージするたびに CI がパッチ番号を進めてタグを打つため、手で管理する必要はない。メジャー・マイナーを上げたいときは、そのコミットにタグを打てばその値が使われる。
+
+手元ビルドでは「いま出ている最新のタグ」を表示する(次の番号を騙らない)。未コミットの変更を含むビルドは `TMSourceCommit` に `-dirty` が付き、更新判定から外れる。
 
 生成物はad-hoc署名。第三者へ配布する場合はDeveloper ID Application証明書での署名とnotarizationが別途必要。
 

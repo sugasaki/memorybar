@@ -8,8 +8,23 @@ cd "$(dirname "$0")/.."
 APP_NAME="TrueMem"
 BUNDLE_ID="com.sugasaki.truemem"
 EXECUTABLE="truemem"
-# バージョンは VERSION ファイルを唯一の出所にする(配布ビルドと手元ビルドで食い違わせない)
-APP_VERSION="${APP_VERSION:-$(cat VERSION 2>/dev/null || echo 0.0.0)}"
+# バージョンは Git タグ(vX.Y.Z)を唯一の出所にする。
+# CI がリリースのたびにタグを打つので、ファイルを書き換えて push する必要がない。
+# 手元ビルドでは「いま出ている最新のタグ」を表示する(次の番号を騙らない)
+version_from_tags() {
+    local exact latest
+    # このコミットにタグが付いていればそれが正
+    if exact="$(git describe --tags --match 'v[0-9]*' --exact-match 2>/dev/null)"; then
+        echo "${exact#v}"
+        return
+    fi
+    if latest="$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null)"; then
+        echo "${latest#v}"
+        return
+    fi
+    echo 0.0.0
+}
+APP_VERSION="${APP_VERSION:-$(version_from_tags)}"
 APP_BUILD="${APP_BUILD:-1}"
 # 更新判定に使うソースコミット。CIでは GITHUB_SHA、ローカルでは git から取る
 # 未コミットの変更を含むビルドに HEAD をそのまま刻むと、実際には別物なのに
