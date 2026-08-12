@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "明示するバージョン(例 1.0.0)。空なら直近タグのパッチを進める"
+        required: false
+        type: string
 
 # latest リリースの作成・更新に必要
 permissions:
@@ -26,20 +31,44 @@ jobs:
       - name: 次のバージョンを決める
         id: version
         run: |
-          # このコミットに既にタグがあれば、それを尊重する
-          # (メジャー・マイナーを上げたいときは手でタグを打てばよい)
-          if exact="$(git describe --tags --match 'v[0-9]*' --exact-match 2>/dev/null)"; then
-            version="${exact#v}"
-            echo "既存のタグ $exact を使用します"
-            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          requested="${{ inputs.version }}"
+          if [ -n "$requested" ]; then
+            # メジャー・マイナーを上げたいときは、手動実行で明示する。
+            # タグを後から打っても、このワークフローはブランチへの push でしか
+            # 起動しないため確実に反映されない
+            version="${requested#v}"
+            echo "指定されたバージョン v$version を使用します"
           else
-            latest="$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || echo v0.0.0)"
-            IFS=. read -r major minor patch <<< "${latest#v}"
-            version="${major}.${minor}.$((patch + 1))"
-            echo "$latest → v$version"
-            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+            # 同じコミットに複数のタグが付いていても結果が変わらないよう、
+            # バージョンとして最も大きいものを選ぶ
+            exact="$(git tag --points-at HEAD --list 'v[0-9]*' | sort -V | tail -1)"
+            if [ -n "$exact" ]; then
+              version="${exact#v}"
+              echo "このコミットのタグ $exact を使用します"
+            else
+              latest="$(git tag --list 'v[0-9]*' | sort -V | tail -1)"
+              latest="${latest:-v0.0.0}"
+              IFS=. read -r major minor patch <<< "${latest#v}"
+              version="${major}.${minor}.$((patch + 1))"
+              echo "$latest → v$version"
+            fi
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: バージョンのタグを打つ
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.version.outputs.version }}"
+          # ビルドより先に打つ。途中で中断されてもタグが残るため、
+          # 次の実行が同じ番号を再利用せず、番号が単調に進む
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag は既にあります"
+          else
+            gh api --method POST /repos/${{ github.repository }}/git/refs \
+              -f ref="refs/tags/$tag" -f sha="${{ github.sha }}" \
+              && echo "$tag を作成しました"
+          fi
 
       - name: Universal バイナリで .app を生成
         env:
@@ -50,17 +79,6 @@ jobs:
           # ビルド番号は実行回数を使う
           APP_BUILD: ${{ github.run_number }}
         run: scripts/make-app.sh
-
-      - name: バージョンのタグを打つ
-        if: steps.version.outputs.tag_exists == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # コミットを作らずタグだけを push する。CI が main を書き換えないので
-          # 無限ループやローカルとの乖離が起きない
-          gh api --method POST /repos/${{ github.repository }}/git/refs \
-            -f ref="refs/tags/v${{ steps.version.outputs.version }}" \
-            -f sha="${{ github.sha }}"
 
       - name: Universal になっていることを確認
         run: |
