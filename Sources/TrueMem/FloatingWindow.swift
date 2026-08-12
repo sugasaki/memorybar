@@ -2,37 +2,31 @@ import AppKit
 import SwiftUI
 
 /// フローティングウィンドウの内容。
-/// 常時表示に耐えるよう、要約と内訳の両方を1枚に収める。
-/// 高さが足りないときは内訳から順に省き、要約は必ず残す
+/// 既定は要約のみのコンパクト表示。「詳細」を開くと内訳とアプリ一覧が加わる
 struct FloatingContentView: View {
     let monitor: MemoryMonitor
     /// 閉じるボタンの動作。ウィンドウを隠すだけでなく設定も切り替える
     let onClose: () -> Void
+    /// 詳細の開閉が変わったときに、ウィンドウの高さを合わせるために呼ぶ
+    let onDetailsToggled: (Bool) -> Void
 
-    /// この高さを下回ったら内訳を省く(要約だけでも読めるようにする)
-    private static let breakdownMinHeight: CGFloat = 210
-    /// 内訳に加えてアプリ一覧まで出すのに必要な高さ。
-    /// 既定サイズがこれを下回ると一覧が一度も出ないため、テストで関係を固定している。
-    /// 内訳7行 + 一覧6行がちょうど収まる高さに合わせてある
-    static let topAppsMinHeight: CGFloat = 470
+    @AppStorage(FloatingWindowController.detailsExpandedKey) private var isExpanded = false
 
     var body: some View {
         GeometryReader { geometry in
-            // 高さに応じて内容を省いても、端数の高さでは末尾が切れる。
-            // 収まらないぶんはスクロールで読めるようにする
+            // 端数の高さでも末尾が読めるようにする
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let snapshot = monitor.snapshot {
-                        header(snapshot)
-                        summary(snapshot)
-                        CompositionBar(snapshot: snapshot)
-                        if geometry.size.height >= Self.breakdownMinHeight {
-                            Divider()
-                            breakdown(snapshot)
-                        }
-                        if geometry.size.height >= Self.topAppsMinHeight, !monitor.topApps.isEmpty {
-                            Divider()
-                            TopAppsView(apps: monitor.topApps)
+                        MemorySummaryView(snapshot: snapshot) { closeButton }
+                        Divider()
+                        DisclosureHeader(title: "詳細", isExpanded: $isExpanded)
+                        if isExpanded {
+                            MemoryDetailsView(snapshot: snapshot)
+                            if !monitor.topApps.isEmpty {
+                                Divider()
+                                TopAppsView(apps: monitor.topApps)
+                            }
                         }
                     } else {
                         Text("計測に失敗しました")
@@ -52,86 +46,19 @@ struct FloatingContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         // タイトルバー領域を避けると上部に余白が残るため、全面に広げる
         .ignoresSafeArea()
+        .onChange(of: isExpanded) { onDetailsToggled(isExpanded) }
     }
 
-    private func header(_ snapshot: MemorySnapshot) -> some View {
-        HStack(spacing: 6) {
-            // ホバーで出す方式はこのウィンドウが key にならないため確実性に欠ける。
-            // 常時表示にして、押せることが常に分かるようにする
-            Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("フローティング表示を閉じる")
-            Text("TrueMem")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            Circle()
-                .fill(pressureColor(snapshot.pressure))
-                .frame(width: 9, height: 9)
-            Text(snapshot.pressure.label)
-                .font(.caption)
+    private var closeButton: some View {
+        // ホバーで出す方式はこのウィンドウが key にならないため確実性に欠ける。
+        // 常時表示にして、押せることが常に分かるようにする
+        Button(action: onClose) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
-    }
-
-    private func summary(_ snapshot: MemorySnapshot) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(MemoryFormat.detail(snapshot.available))
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-            Text("空き")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            Text("\(Int((snapshot.usedFraction * 100).rounded()))%")
-                .font(.title3.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    /// 帯と同じ順序・同じ色で並べる。凡例と内訳を兼ねる
-    private func breakdown(_ snapshot: MemorySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(MemoryComposition.segments(of: snapshot)) { segment in
-                HStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(segment.color)
-                        .frame(width: 9, height: 9)
-                    Text(segment.label)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(MemoryFormat.detail(segment.bytes))
-                        .monospacedDigit()
-                }
-                .font(.callout)
-            }
-            Divider()
-            HStack {
-                Text("使用済みスワップ")
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Text(MemoryFormat.detail(snapshot.swapUsed))
-                    .monospacedDigit()
-            }
-            .font(.callout)
-        }
-    }
-
-    private func pressureColor(_ pressure: MemoryPressure) -> Color {
-        switch pressure {
-        case .normal: .green
-        case .warning: .yellow
-        case .critical: .red
-        case .unknown: .gray
-        }
+        .buttonStyle(.plain)
+        .help("フローティング表示を閉じる")
     }
 }
 
@@ -143,10 +70,18 @@ final class FloatingWindowController {
     // テストや CLI から非 MainActor でも読めるようにする(値を持つだけで状態はない)
     nonisolated static let defaultsKey = "floatingWindowVisible"
     nonisolated static let frameAutosaveName = "TrueMemFloatingWindow"
-    /// 内訳まで収まる既定サイズ
-    nonisolated static let defaultSize = NSSize(width: 300, height: 470)
+    /// 詳細の開閉状態。パネルとは別に持つ(常時表示と都度確認で役割が異なるため)
+    nonisolated static let detailsExpandedKey = "floatingDetailsExpanded"
+    /// 状態ごとの高さ。開閉を往復しても利用者が決めた大きさを失わないため
+    nonisolated static let compactHeightKey = "floatingCompactHeight"
+    nonisolated static let expandedHeightKey = "floatingExpandedHeight"
+    /// 要約のみの既定サイズ。既定はコンパクトに保つ
+    nonisolated static let compactSize = NSSize(width: 300, height: 168)
+    /// 詳細を開いたときの高さ(内訳7行 + アプリ一覧6行が収まる)
+    nonisolated static let expandedHeight: CGFloat = 560
+    nonisolated static var defaultSize: NSSize { compactSize }
     /// これ以上小さくすると要約すら読めなくなる
-    nonisolated static let minimumSize = NSSize(width: 220, height: 118)
+    nonisolated static let minimumSize = NSSize(width: 220, height: 130)
 
     private var panel: NSPanel?
     private let monitor: MemoryMonitor
@@ -208,10 +143,15 @@ final class FloatingWindowController {
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.contentView = NSHostingView(
-            rootView: FloatingContentView(monitor: monitor) { [weak self] in
-                // 設定ごと切り替える。次回起動時に勝手に復活させないため
-                self?.isVisible = false
-            })
+            rootView: FloatingContentView(
+                monitor: monitor,
+                onClose: { [weak self] in
+                    // 設定ごと切り替える。次回起動時に勝手に復活させないため
+                    self?.isVisible = false
+                },
+                onDetailsToggled: { [weak self] expanded in
+                    self?.resizeForDetails(expanded: expanded)
+                }))
 
         // 位置とサイズを記憶する
         panel.setFrameAutosaveName(Self.frameAutosaveName)
@@ -219,14 +159,87 @@ final class FloatingWindowController {
         if panel.frame.origin == .zero || !Self.isOnAnyScreen(panel.frame) {
             Self.moveToDefaultPosition(panel)
         }
+        // 詳細を開いた状態で起動したとき、記憶した高さが足りないと中身が収まらない。
+        // 折りたたみ状態では記憶した高さをそのまま使う(利用者の選択を壊さない)
+        if UserDefaults.standard.bool(forKey: Self.detailsExpandedKey) {
+            let visible = Self.visibleFrame(containing: panel.frame)
+            panel.setFrame(
+                Self.frame(
+                    for: true, current: panel.frame,
+                    storedHeight: Self.storedHeight(expanded: true), within: visible),
+                display: false)
+        }
         panel.orderFrontRegardless()
         self.panel = panel
+    }
+
+    /// 詳細の開閉に合わせて高さを変える。
+    /// 状態ごとに高さを覚えるので、利用者がどちらかで広げてもそれを失わない
+    private func resizeForDetails(expanded: Bool) {
+        guard let panel else { return }
+        // 切り替える前の状態の高さを覚えておく
+        Self.storeHeight(panel.frame.height, expanded: !expanded)
+        let visible = Self.visibleFrame(containing: panel.frame)
+        let target = Self.frame(
+            for: expanded, current: panel.frame, storedHeight: Self.storedHeight(expanded: expanded),
+            within: visible)
+        // animate: true は表示中のウィンドウで約0.35秒メインスレッドを止め、
+        // その間 1秒更新もメニューバーの文字列も停止するため使わない
+        panel.setFrame(target, display: true)
+    }
+
+    /// 状態ごとに記憶した高さ。無ければ nil
+    nonisolated static func storedHeight(expanded: Bool) -> CGFloat? {
+        let key = expanded ? expandedHeightKey : compactHeightKey
+        let value = UserDefaults.standard.double(forKey: key)
+        return value > 0 ? CGFloat(value) : nil
+    }
+
+    nonisolated static func storeHeight(_ height: CGFloat, expanded: Bool) {
+        UserDefaults.standard.set(
+            Double(height), forKey: expanded ? expandedHeightKey : compactHeightKey)
+    }
+
+    /// 開閉後のフレームを求める。
+    ///
+    /// - 上端を固定して下方向へ伸縮する(置いた位置がずれないようにする)
+    /// - その状態で記憶した高さがあればそれを使う。利用者がどちらの状態で
+    ///   広げても、開閉を往復して失われないようにする
+    /// - 画面の可視領域からはみ出さないよう収める。AppKit の自動補正は
+    ///   上端しか守らないため、下端は自分で見る必要がある
+    nonisolated static func frame(
+        for expanded: Bool, current: NSRect, storedHeight: CGFloat? = nil, within visible: NSRect
+    ) -> NSRect {
+        let fallback = expanded ? expandedHeight : compactSize.height
+        // 記憶が無い場合も、展開なら現在より縮めない(中身が収まらなくなるため)
+        let desired =
+            storedHeight ?? (expanded ? max(current.height, fallback) : fallback)
+        var frame = current
+        let top = current.maxY
+        frame.size.height = min(desired, max(minimumSize.height, visible.height))
+        frame.origin.y = top - frame.size.height
+        if frame.minY < visible.minY { frame.origin.y = visible.minY }
+        if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.size.height }
+        return frame
+    }
+
+    /// ウィンドウが最も重なっている画面の可視領域
+    nonisolated static func visibleFrame(containing frame: NSRect) -> NSRect {
+        let screen =
+            NSScreen.screens.max {
+                $0.visibleFrame.intersection(frame).area < $1.visibleFrame.intersection(frame).area
+            } ?? NSScreen.main
+        return screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
     }
 
     /// 見失ったときに呼び出して、既定のサイズと位置へ引き戻す
     func resetPosition() {
         guard let panel else { return }
-        panel.setContentSize(Self.defaultSize)
+        let expanded = UserDefaults.standard.bool(forKey: Self.detailsExpandedKey)
+        panel.setContentSize(
+            NSSize(
+                width: Self.compactSize.width,
+                height: expanded ? Self.expandedHeight : Self.compactSize.height))
         Self.moveToDefaultPosition(panel)
         panel.orderFrontRegardless()
     }
@@ -244,4 +257,9 @@ final class FloatingWindowController {
                 x: visible.maxX - panel.frame.width - 24,
                 y: visible.maxY - panel.frame.height - 24))
     }
+}
+
+extension NSRect {
+    /// 重なりの大きさ比較用。空の交差は 0 になる
+    fileprivate var area: CGFloat { isEmpty ? 0 : width * height }
 }
