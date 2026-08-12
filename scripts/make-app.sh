@@ -76,6 +76,13 @@ mkdir -p "$APP_DIR/Contents/MacOS"
 
 cp "$BIN_DIR/$EXECUTABLE" "$APP_DIR/Contents/MacOS/$EXECUTABLE"
 
+# アイコンを生成して組み込む。生成物はリポジトリに置かず、毎回作り直す
+mkdir -p "$APP_DIR/Contents/Resources"
+ICON_WORK="$(mktemp -d)"
+trap 'rm -rf "$ICON_WORK"' EXIT
+swift scripts/icon/make-icon.swift "$ICON_WORK" >/dev/null
+iconutil -c icns "$ICON_WORK/AppIcon.iconset" -o "$APP_DIR/Contents/Resources/AppIcon.icns"
+
 cat > "$APP_DIR/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -83,6 +90,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 <dict>
 	<key>CFBundleExecutable</key>
 	<string>$EXECUTABLE</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>$BUNDLE_ID</string>
 	<key>CFBundleName</key>

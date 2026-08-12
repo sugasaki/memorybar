@@ -66,6 +66,12 @@ gh auth login
 
 計算式の検証記録は [Issue #24](https://github.com/sugasaki/truemem/issues/24) を参照。
 
+## アイコン
+
+アイコンは `scripts/icon/make-icon.swift` が生成する。**生成物ではなく生成コードを置いている**ので、色や形はコードを直して作り直せる。`scripts/make-app.sh` がビルドのたびに呼び出すため、手作業は要らない。
+
+16px では要素が潰れるため、ピンを省き帯を3色に絞った専用の描き分けをしている。
+
 ## ビルド
 
 要件: macOS 14以降、Xcode(またはSwift 6 toolchain)
