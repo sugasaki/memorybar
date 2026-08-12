@@ -7,6 +7,8 @@ struct MenuContentView: View {
     let updateController: UpdateController
     let floatingController: FloatingWindowController
     @State private var floatingVisible = false
+    @AppStorage("panelDetailsExpanded") private var detailsExpanded = false
+    @AppStorage("panelSettingsExpanded") private var settingsExpanded = false
     @State private var contentHeight: CGFloat = MenuContentView.fallbackPanelHeight
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
@@ -46,65 +48,33 @@ struct MenuContentView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let snapshot = monitor.snapshot {
-                header(snapshot)
+                // フローティングと同じ要約表示を使い、見た目を揃える
+                MemorySummaryView(snapshot: snapshot)
                 Divider()
-                rows(snapshot)
+                DisclosureHeader(title: "詳細", isExpanded: $detailsExpanded)
+                if detailsExpanded {
+                    MemoryDetailsView(snapshot: snapshot)
+                    if !monitor.topApps.isEmpty {
+                        Divider()
+                        TopAppsView(apps: monitor.topApps)
+                    }
+                }
             } else {
                 Text("計測に失敗しました")
                     .foregroundStyle(.secondary)
             }
-            if !monitor.topApps.isEmpty {
+            Divider()
+            DisclosureHeader(title: "設定", isExpanded: $settingsExpanded)
+            if settingsExpanded {
+                settings
+                floating
                 Divider()
-                TopAppsView(apps: monitor.topApps)
+                updates
             }
-            Divider()
-            settings
-            floating
-            Divider()
-            updates
             Divider()
             footer
         }
         .padding(12)
-    }
-
-    private func header(_ snapshot: MemorySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("メモリ").font(.headline)
-                Spacer()
-                Text("物理 \(MemoryFormat.detail(snapshot.total))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            ProgressView(value: snapshot.usedFraction)
-                .tint(usageBarTint(snapshot.pressure))
-        }
-    }
-
-    private func rows(_ snapshot: MemorySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            row("使用済みメモリ", MemoryFormat.detail(snapshot.used), bold: true)
-            subRow("アプリメモリ", MemoryFormat.detail(snapshot.appMemory))
-            subRow("確保済みメモリ", MemoryFormat.detail(snapshot.wired))
-            subRow("圧縮", MemoryFormat.detail(snapshot.compressed))
-            // 内訳の合計が使用済みと一致するよう、どのカテゴリにも入らない分を示す
-            subRow("その他", MemoryFormat.detail(snapshot.other))
-            row("キャッシュされたファイル", MemoryFormat.detail(snapshot.cachedFiles))
-            row("未使用", MemoryFormat.detail(snapshot.unused))
-            row("使用済みスワップ", MemoryFormat.detail(snapshot.swapUsed))
-            row("残容量", MemoryFormat.detail(snapshot.available), bold: true)
-            HStack {
-                Text("メモリプレッシャー")
-                Spacer()
-                Circle()
-                    .fill(pressureColor(snapshot.pressure))
-                    .frame(width: 8, height: 8)
-                Text(snapshot.pressure.label)
-                    .monospacedDigit()
-            }
-            .font(.callout)
-        }
     }
 
     private var settings: some View {
@@ -204,40 +174,6 @@ struct MenuContentView: View {
         }
     }
 
-    private func row(_ title: String, _ value: String, bold: Bool = false) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value).monospacedDigit()
-        }
-        .font(bold ? .callout.weight(.semibold) : .callout)
-    }
-
-    private func subRow(_ title: String, _ value: String) -> some View {
-        HStack {
-            Text(title).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).foregroundStyle(.secondary).monospacedDigit()
-        }
-        .font(.callout)
-        .padding(.leading, 12)
-    }
-
-    /// 使用率バーの色。プレッシャーが取得不能でも使用率自体は有効な値なので、
-    /// バーまで灰色にして「値が取れていない」と誤読させない。
-    /// アクセントカラーはユーザー設定で灰色(グラファイト)や赤にできてしまうため使わない
-    private func usageBarTint(_ pressure: MemoryPressure) -> Color {
-        pressure == .unknown ? .blue : pressureColor(pressure)
-    }
-
-    private func pressureColor(_ pressure: MemoryPressure) -> Color {
-        switch pressure {
-        case .normal: .green
-        case .warning: .yellow
-        case .critical: .red
-        case .unknown: .gray
-        }
-    }
 }
 
 /// パネル内容の実測高さを親へ伝える

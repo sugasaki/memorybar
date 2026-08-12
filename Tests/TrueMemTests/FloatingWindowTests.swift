@@ -60,11 +60,16 @@ final class FloatingWindowTests: XCTestCase {
         XCTAssertFalse(afterRelaunch.isVisible)
     }
 
-    func test既定サイズでアプリ一覧まで表示される() {
-        // 閾値より既定サイズが小さいと、新規利用者には一覧が一度も出ない
-        XCTAssertGreaterThanOrEqual(
-            FloatingWindowController.defaultSize.height,
-            FloatingContentView.topAppsMinHeight)
+    func test詳細を開くと高さが増える() {
+        // 開いても高さが変わらないと、内容が枠に収まらずスクロール頼りになる
+        XCTAssertGreaterThan(
+            FloatingWindowController.expandedHeight,
+            FloatingWindowController.compactSize.height)
+    }
+
+    func test既定はコンパクト表示() {
+        // 既定で詳細まで開くと情報が多すぎて視認性が落ちる(Issue #43)
+        XCTAssertEqual(FloatingWindowController.defaultSize, FloatingWindowController.compactSize)
     }
 
     func test最小サイズは既定サイズより小さく要約が収まる大きさである() {
