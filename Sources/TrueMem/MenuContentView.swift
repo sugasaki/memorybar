@@ -9,7 +9,6 @@ struct MenuContentView: View {
     @State private var floatingVisible = false
     @AppStorage(MenuContentView.detailsExpandedKey) private var detailsExpanded = false
     @AppStorage(MenuContentView.settingsExpandedKey) private var settingsExpanded = false
-    @State private var contentHeight: CGFloat = MenuContentView.fallbackPanelHeight
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
     /// 角丸の半径。
@@ -19,48 +18,23 @@ struct MenuContentView: View {
     /// 開閉状態の保存キー。テストからも参照できるよう定数にする
     static let detailsExpandedKey = "panelDetailsExpanded"
     static let settingsExpandedKey = "panelSettingsExpanded"
-    /// 画面に対して残す余白。メニューバーと画面端に食い込ませない
-    private static let screenMargin: CGFloat = 120
-    /// 実測できるまでの高さ。既定はコンパクトなので、その実寸に近い値にしておく
-    static let fallbackPanelHeight: CGFloat = 240
-
     /// 更新について利用者に伝えるべきことがあるか(更新あり・処理中・失敗)
     private var needsUpdateAttention: Bool {
         let state = updateController.state
         return state.availableRelease != nil || state.isBusy || state.failureDetail != nil
     }
 
-    /// パネルの高さの上限。アプリ一覧や更新の詳細が加わると、
-    /// 短い画面や拡大表示では画面高を超えて末尾が操作できなくなる
-    private var maxPanelHeight: CGFloat {
-        let usable = NSScreen.main?.visibleFrame.height ?? 800
-        return max(320, usable - Self.screenMargin)
-    }
-
     var body: some View {
-        // MenuBarExtra(.window) は内容の固有サイズからパネルの大きさを決めるが、
-        // ScrollView は縦の固有サイズを持たない。そのまま包むとパネルが潰れるため、
-        // 内容の高さを実測して明示的に与える(Issue #41)
-        ScrollView(.vertical) {
-            content
-                .background(
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: PanelContentHeightKey.self, value: proxy.size.height)
-                    })
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .frame(width: 280)
-        .frame(height: min(contentHeight, maxPanelHeight))
-        .onPreferenceChange(PanelContentHeightKey.self) { height in
-            // 0 を採用すると潰れるため、実測できるまでは既定値のままにする
-            if height > 0 { contentHeight = height }
-        }
-        // 角丸をシステムの描画に任せると環境によって四角くなる(Issue #45)。
-        // ただし SwiftUI 側で形を描くとシステムの縁と二重になる(Issue #49)。
-        // 縁を1本にするため、ウィンドウのレイヤー側だけで丸める
-        .background(.regularMaterial)
-        .background(RoundedWindowBackground(cornerRadius: Self.cornerRadius))
+        // ウィンドウの大きさは内容の固有サイズに任せる。
+        // ScrollView で包んで高さを実測・指定する方式は、ウィンドウと内容の
+        // 大きさが別々に決まるため、縮まなかったときに差分が露出した(Issue #55)
+        content
+            .frame(width: 280)
+            // 角丸をシステムの描画に任せると環境によって四角くなる(Issue #45)。
+            // ただし SwiftUI 側で形を描くとシステムの縁と二重になる(Issue #49)。
+            // 縁を1本にするため、ウィンドウのレイヤー側だけで丸める
+            .background(.regularMaterial)
+            .background(RoundedWindowBackground(cornerRadius: Self.cornerRadius))
     }
 
     private var content: some View {
@@ -217,13 +191,6 @@ struct MenuContentView: View {
 
 }
 
-/// パネル内容の実測高さを親へ伝える
-private struct PanelContentHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
 
 /// ホストしているウィンドウを透明にし、角丸マスクを適用する。
 ///
