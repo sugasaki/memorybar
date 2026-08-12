@@ -12,6 +12,8 @@ struct MenuContentView: View {
     @State private var contentHeight: CGFloat = MenuContentView.fallbackPanelHeight
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
+    /// フローティングと揃えた角丸の半径
+    static let cornerRadius: CGFloat = 12
     /// 開閉状態の保存キー。テストからも参照できるよう定数にする
     static let detailsExpandedKey = "panelDetailsExpanded"
     static let settingsExpandedKey = "panelSettingsExpanded"
@@ -52,6 +54,13 @@ struct MenuContentView: View {
             // 0 を採用すると潰れるため、実測できるまでは既定値のままにする
             if height > 0 { contentHeight = height }
         }
+        // 角丸をシステムの描画に任せると環境によって四角くなる(Issue #45)。
+        // フローティングと同じく自前で描き、見た目も揃える
+        .background(.regularMaterial)
+        .overlay(RoundedRectangle(cornerRadius: Self.cornerRadius).strokeBorder(.separator, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
+        // ホスト側のウィンドウが四角い背景を塗ると角丸が隠れるため透明にする
+        .background(TransparentWindowBackground())
     }
 
     private var content: some View {
@@ -202,5 +211,27 @@ private struct PanelContentHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
+    }
+}
+
+/// ホストしているウィンドウの背景を透明にする。
+/// MenuBarExtra のパネルは環境によって四角い不透明背景を塗ることがあり、
+/// そのままだと自前で描いた角丸が隠れてしまう(Issue #45)
+private struct TransparentWindowBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        // ビュー階層に入るまで window は nil のため、次のループで適用する
+        DispatchQueue.main.async { Self.makeTransparent(view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        Self.makeTransparent(nsView.window)
+    }
+
+    private static func makeTransparent(_ window: NSWindow?) {
+        guard let window else { return }
+        window.isOpaque = false
+        window.backgroundColor = .clear
     }
 }
