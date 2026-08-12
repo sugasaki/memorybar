@@ -113,19 +113,34 @@ jobs:
 
           # GitHub API は「タグが既存なら target_commitish を無視する」ため、
           # edit では更新先コミットが古いまま残る。アプリの更新判定が
-          # 永久に一致しなくなるので、タグごと削除して作り直す
-          if gh release view latest >/dev/null 2>&1; then
-            gh release delete latest --yes --cleanup-tag
-          fi
+          # 永久に一致しなくなるので、タグごと削除して作り直す。
+          #
+          # 削除は結果を問わない。API が一時的に "release not found" を返して
+          # 失敗した実例があり、消えていないなら次の create が弾いてくれる
+          gh release delete latest --yes --cleanup-tag || echo "削除をとばしました"
 
           # 資産を create と同時に添付し、「新しいメタデータ + 古い zip」を
-          # 掴む隙間を作らない
-          gh release create latest \
-            --title "Latest build" \
-            --notes-file release-notes.md \
-            --target "${GITHUB_SHA}" \
-            --latest \
-            dist/TrueMem.zip
+          # 掴む隙間を作らない。
+          # API の一時的な不調で落ちないよう数回試す
+          for attempt in 1 2 3; do
+            if gh release create latest \
+              --title "Latest build" \
+              --notes-file release-notes.md \
+              --target "${GITHUB_SHA}" \
+              --latest \
+              dist/TrueMem.zip
+            then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "リリースの作成に3回失敗しました"
+              exit 1
+            fi
+            echo "作成に失敗。${attempt}回目、10秒後に再試行します"
+            sleep 10
+            # 中途半端に作られていたら消してからやり直す
+            gh release delete latest --yes --cleanup-tag || true
+          done
 
       - name: リリースが今回のコミットを指していることを確認
         env:
