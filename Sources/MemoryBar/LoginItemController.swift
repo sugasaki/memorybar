@@ -67,11 +67,9 @@ final class LoginItemController {
         switch status {
         case .requiresApproval:
             return "登録済みですが、システム設定での許可が必要です。"
-        case .notFound:
-            return "この起動方法では利用できません。MemoryBar.app から起動してください。"
         case .unknown:
             return "ログイン項目の状態を確認できませんでした。"
-        case .enabled, .notRegistered:
+        case .enabled, .notRegistered, .notFound:
             return nil
         }
     }
@@ -108,11 +106,10 @@ final class LoginItemController {
                 switch status {
                 case .enabled, .requiresApproval:
                     break
-                case .notRegistered:
+                // mainApp は初回登録前に .notFound を返すことがある。
+                // 登録不能とは決めつけず、実際に register() を試す。
+                case .notRegistered, .notFound:
                     try service.register()
-                case .notFound:
-                    throw LoginItemError(
-                        "MemoryBar.app の外から起動しているため、ログイン項目を登録できません。")
                 case .unknown:
                     throw LoginItemError("ログイン項目の状態を確認できません。")
                 }
@@ -120,11 +117,8 @@ final class LoginItemController {
                 switch status {
                 case .enabled, .requiresApproval:
                     try service.unregister()
-                case .notRegistered:
+                case .notRegistered, .notFound:
                     break
-                case .notFound:
-                    throw LoginItemError(
-                        "MemoryBar.app のログイン項目を見つけられませんでした。")
                 case .unknown:
                     throw LoginItemError("ログイン項目の状態を確認できません。")
                 }
@@ -156,7 +150,7 @@ final class LoginItemController {
 
     private func matches(requestedEnabled enabled: Bool) -> Bool {
         if enabled { return status == .enabled || status == .requiresApproval }
-        return status == .notRegistered
+        return status == .notRegistered || status == .notFound
     }
 
     private struct LoginItemError: LocalizedError {
