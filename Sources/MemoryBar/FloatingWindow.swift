@@ -181,7 +181,6 @@ final class FloatingWindowController {
         panel.setFrame(
             Self.launchFrame(
                 for: expanded, layoutChanged: Self.consumeLayoutChange(), current: panel.frame,
-                storedHeight: Self.storedHeight(expanded: expanded),
                 within: Self.visibleFrame(containing: panel.frame)),
             display: false)
         panel.orderFrontRegardless()
@@ -254,19 +253,19 @@ final class FloatingWindowController {
     /// 起動時のフレーム。自動保存されるのは直前の高さだけなので、
     /// 状態に応じてここで補う。`show()` から切り出して単体で確かめられるようにする
     ///
-    /// - 表示項目を変えた版の初回: 記憶を捨てて必要量まで広げる(縮めはしない)
-    /// - 展開状態: 展開時に記憶した高さへ戻す。これが無いと折りたたみ時の高さで開き、
-    ///   内訳が切れて見える(Issue #69)
+    /// - 表示項目を変えた版の初回: 必要量まで広げる(縮めはしない)
+    /// - 展開状態: 足りなければ展開時の必要量まで広げる。これが無いと折りたたみ時の
+    ///   高さで開き、内訳が切れて見える(Issue #69)
     /// - 折りたたみ状態: 自動保存された高さをそのまま使う(利用者が決めた大きさを壊さない)
+    ///
+    /// 状態ごとに記憶した高さ(`storedHeight`)はここでは使わない。あれは開閉を
+    /// 往復するための値で、書かれるのはその状態を離れるときだけ。展開したまま
+    /// 手で広げて終了した場合、最新の高さを持っているのは自動保存の側になる
     nonisolated static func launchFrame(
-        for expanded: Bool, layoutChanged: Bool, current: NSRect, storedHeight: CGFloat?,
-        within visible: NSRect
+        for expanded: Bool, layoutChanged: Bool, current: NSRect, within visible: NSRect
     ) -> NSRect {
-        if layoutChanged {
-            return grownFrame(for: expanded, current: current, within: visible)
-        }
-        guard expanded else { return current }
-        return frame(for: true, current: current, storedHeight: storedHeight, within: visible)
+        guard layoutChanged || expanded else { return current }
+        return grownFrame(for: expanded, current: current, within: visible)
     }
 
     /// 表示項目を変えた版の初回に使うフレーム。

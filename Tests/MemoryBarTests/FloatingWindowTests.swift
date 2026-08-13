@@ -135,19 +135,25 @@ final class FloatingWindowTests: XCTestCase {
         XCTAssertEqual(result.height, 300)
     }
 
-    func test展開状態で起動したら展開時の高さへ戻す() {
+    func test展開状態で起動したら展開時の高さまで広げる() {
         // 自動保存されるのは直前の高さだけ。折りたたみ時の高さで開くと内訳が切れる(Issue #69)
         let saved = NSRect(
             x: 100, y: 900, width: 300,
             height: FloatingWindowController.compactSize.height)
         XCTAssertEqual(
             FloatingWindowController.launchFrame(
-                for: true, layoutChanged: false, current: saved, storedHeight: 700, within: screen
-            ).height, 700, "展開時に記憶した高さへ戻す")
+                for: true, layoutChanged: false, current: saved, within: screen
+            ).height, FloatingWindowController.expandedHeight)
+    }
+
+    func test展開したまま手で広げた高さを起動時に失わない() {
+        // 状態ごとの記憶は「その状態を離れるとき」にしか書かれないので、
+        // 展開したまま広げて終了した場合は自動保存の側が最新になる
+        let resized = NSRect(x: 100, y: 950, width: 300, height: 800)
         XCTAssertEqual(
             FloatingWindowController.launchFrame(
-                for: true, layoutChanged: false, current: saved, storedHeight: nil, within: screen
-            ).height, FloatingWindowController.expandedHeight, "記憶が無ければ展開時の既定へ")
+                for: true, layoutChanged: false, current: resized, within: screen
+            ).height, 800)
     }
 
     func test折りたたみ状態の起動では高さを触らない() {
@@ -155,18 +161,15 @@ final class FloatingWindowTests: XCTestCase {
         let saved = NSRect(x: 100, y: 900, width: 300, height: 190)
         XCTAssertEqual(
             FloatingWindowController.launchFrame(
-                for: false, layoutChanged: false, current: saved, storedHeight: 400, within: screen
-            ), saved)
+                for: false, layoutChanged: false, current: saved, within: screen), saved)
     }
 
-    func test版が変わった回は展開状態でも必要量まで広げる() {
-        let saved = NSRect(
-            x: 100, y: 900, width: 300,
-            height: FloatingWindowController.compactSize.height)
+    func test版が変わった回は折りたたみ状態でも必要量まで広げる() {
+        let saved = NSRect(x: 100, y: 900, width: 300, height: 168)
         XCTAssertEqual(
             FloatingWindowController.launchFrame(
-                for: true, layoutChanged: true, current: saved, storedHeight: 300, within: screen
-            ).height, FloatingWindowController.expandedHeight, "捨てたはずの記憶を使わない")
+                for: false, layoutChanged: true, current: saved, within: screen
+            ).height, FloatingWindowController.compactSize.height)
     }
 
     func test記憶を捨てた後は必要量まで広げるが縮めない() {
