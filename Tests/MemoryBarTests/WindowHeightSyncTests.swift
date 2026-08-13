@@ -82,6 +82,22 @@ final class WindowHeightSyncTests: XCTestCase {
         XCTAssertEqual(grown.height, 800)
     }
 
+    func test画面が広がったら本来の高さへ伸び直せる() {
+        // 丸める前の高さを記録すると、収まらない間は現在値と一致しないまま
+        // 記録だけが残り、解像度変更などで広がっても伸び直せなくなる
+        let small = NSRect(x: 0, y: 0, width: 1600, height: 500)
+        let current = NSRect(x: 100, y: 500, width: 280, height: 838)
+        let clamped = WindowHeightSync.frame(current: current, height: 838, within: small)
+        XCTAssertEqual(clamped.height, 500, "可視領域までに丸める")
+
+        // 丸めた後の高さで記録するので、反映後は一致して記録が消える
+        XCTAssertEqual(
+            WindowHeightSync.action(current: 500, target: 500, requested: 500), .clearRequest)
+        // 画面が広がれば、内容本来の高さを改めて要求できる
+        XCTAssertEqual(
+            WindowHeightSync.action(current: 500, target: 838, requested: nil), .apply(838))
+    }
+
     func test画面からはみ出さない() {
         // パネルはスクロールできないので、はみ出すと下端に手が届かなくなる
         let small = NSRect(x: 0, y: 0, width: 1600, height: 500)
