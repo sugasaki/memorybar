@@ -177,15 +177,13 @@ final class FloatingWindowController {
         if panel.frame.origin == .zero || !Self.isOnAnyScreen(panel.frame) {
             Self.moveToDefaultPosition(panel)
         }
-        // 表示項目を変えた版の初回だけ、記憶を捨てて必要量まで広げる。
-        // 縮めはしないので、利用者が広げていた大きさは残る
         let expanded = UserDefaults.standard.bool(forKey: Self.detailsExpandedKey)
-        if Self.consumeLayoutChange() {
-            let visible = Self.visibleFrame(containing: panel.frame)
-            panel.setFrame(
-                Self.grownFrame(for: expanded, current: panel.frame, within: visible),
-                display: false)
-        }
+        panel.setFrame(
+            Self.launchFrame(
+                for: expanded, layoutChanged: Self.consumeLayoutChange(), current: panel.frame,
+                storedHeight: Self.storedHeight(expanded: expanded),
+                within: Self.visibleFrame(containing: panel.frame)),
+            display: false)
         panel.orderFrontRegardless()
         self.panel = panel
     }
@@ -251,6 +249,24 @@ final class FloatingWindowController {
         if frame.minY < visible.minY { frame.origin.y = visible.minY }
         if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.size.height }
         return frame
+    }
+
+    /// 起動時のフレーム。自動保存されるのは直前の高さだけなので、
+    /// 状態に応じてここで補う。`show()` から切り出して単体で確かめられるようにする
+    ///
+    /// - 表示項目を変えた版の初回: 記憶を捨てて必要量まで広げる(縮めはしない)
+    /// - 展開状態: 展開時に記憶した高さへ戻す。これが無いと折りたたみ時の高さで開き、
+    ///   内訳が切れて見える(Issue #69)
+    /// - 折りたたみ状態: 自動保存された高さをそのまま使う(利用者が決めた大きさを壊さない)
+    nonisolated static func launchFrame(
+        for expanded: Bool, layoutChanged: Bool, current: NSRect, storedHeight: CGFloat?,
+        within visible: NSRect
+    ) -> NSRect {
+        if layoutChanged {
+            return grownFrame(for: expanded, current: current, within: visible)
+        }
+        guard expanded else { return current }
+        return frame(for: true, current: current, storedHeight: storedHeight, within: visible)
     }
 
     /// 表示項目を変えた版の初回に使うフレーム。

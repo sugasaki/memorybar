@@ -135,6 +135,40 @@ final class FloatingWindowTests: XCTestCase {
         XCTAssertEqual(result.height, 300)
     }
 
+    func test展開状態で起動したら展開時の高さへ戻す() {
+        // 自動保存されるのは直前の高さだけ。折りたたみ時の高さで開くと内訳が切れる(Issue #69)
+        let saved = NSRect(
+            x: 100, y: 900, width: 300,
+            height: FloatingWindowController.compactSize.height)
+        XCTAssertEqual(
+            FloatingWindowController.launchFrame(
+                for: true, layoutChanged: false, current: saved, storedHeight: 700, within: screen
+            ).height, 700, "展開時に記憶した高さへ戻す")
+        XCTAssertEqual(
+            FloatingWindowController.launchFrame(
+                for: true, layoutChanged: false, current: saved, storedHeight: nil, within: screen
+            ).height, FloatingWindowController.expandedHeight, "記憶が無ければ展開時の既定へ")
+    }
+
+    func test折りたたみ状態の起動では高さを触らない() {
+        // 利用者が決めた大きさを起動のたびに書き換えない
+        let saved = NSRect(x: 100, y: 900, width: 300, height: 190)
+        XCTAssertEqual(
+            FloatingWindowController.launchFrame(
+                for: false, layoutChanged: false, current: saved, storedHeight: 400, within: screen
+            ), saved)
+    }
+
+    func test版が変わった回は展開状態でも必要量まで広げる() {
+        let saved = NSRect(
+            x: 100, y: 900, width: 300,
+            height: FloatingWindowController.compactSize.height)
+        XCTAssertEqual(
+            FloatingWindowController.launchFrame(
+                for: true, layoutChanged: true, current: saved, storedHeight: 300, within: screen
+            ).height, FloatingWindowController.expandedHeight, "捨てたはずの記憶を使わない")
+    }
+
     func test記憶を捨てた後は必要量まで広げるが縮めない() {
         // 表示項目を変えた版では記憶を捨てて呼ぶ。増えた行が隠れないよう
         // 必要量までは広げ、利用者が広げていた大きさは縮めない(Issue #66)
