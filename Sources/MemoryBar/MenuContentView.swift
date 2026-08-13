@@ -117,21 +117,27 @@ struct MenuContentView: View {
 
     private var updates: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // ボタンと状態を同じ行に並べるとパネルの幅に収まらない。
+            // 収まらない行があると内容全体の幅がそれに引きずられ、外側の
+            // .frame(width:) が折り返しではなく切り落としとして働くため、
+            // 失敗の理由と対処が読めなくなる(Issue #73)
             HStack {
                 Button("更新を確認") { updateController.check() }
                     .font(.callout)
                     .disabled(updateController.state.isBusy)
                 Button("リリースページ") { updateController.openReleasePage() }
                     .font(.callout)
-                Spacer()
+                Spacer(minLength: 0)
+            }
+            // インストール中は次の行が進行を示すので、短い状態語は出さない
+            if updateController.state != .installing, !updateController.state.message.isEmpty {
                 Text(updateController.state.message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if updateController.state == .installing {
-                // 上段のキャプションは幅が足りず切り詰められるため、
-                // 進行中は専用の行で状態を示す
+                // 何が進んでいるのかを、短い状態語より具体的に示す
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("ダウンロードしてインストールしています…")
@@ -158,8 +164,10 @@ struct MenuContentView: View {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    // gh の生出力がそのまま入ることがあるため、パネルが伸び続けないようにする
+                    // gh の生出力がそのまま入ることがあるため、パネルが伸び続けないようにする。
+                    // 折り返させないと1行で切れて対処方法が読めない(Issue #73)
                     .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
                     .help(detail)
             }
             Toggle("定期的に自動で確認", isOn: updateAutomaticallyBinding)
