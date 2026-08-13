@@ -83,7 +83,8 @@ extension DisplayModeTests {
         // MemoryLabel と突き合わせても同語反復になるため、期待する語を直に書く
         XCTAssertEqual(DisplayMode.freeGB.primaryCaption, "利用可能なメモリ")
         XCTAssertEqual(DisplayMode.usedGB.primaryCaption, "使用済みメモリ")
-        XCTAssertEqual(DisplayMode.usedPercent.primaryCaption, "使用済みメモリ")
+        // %表示のとき「使用済みメモリ」だと量に読めるので使用率と呼ぶ
+        XCTAssertEqual(DisplayMode.usedPercent.primaryCaption, "使用率")
     }
 
     func test伝わりにくい表記を使わない() {

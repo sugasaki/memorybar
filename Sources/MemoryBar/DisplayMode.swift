@@ -43,7 +43,9 @@ enum DisplayMode: String, CaseIterable, Identifiable, Sendable {
     var primaryCaption: String {
         switch self {
         case .freeGB: MemoryLabel.available
-        case .usedGB, .usedPercent: MemoryLabel.used
+        case .usedGB: MemoryLabel.used
+        // 単位が%なので「使用済みメモリ」だと量に読める。詳細の行名と揃える
+        case .usedPercent: MemoryLabel.usedRatio
         }
     }
 
