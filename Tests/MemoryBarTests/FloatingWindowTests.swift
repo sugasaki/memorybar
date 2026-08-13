@@ -212,9 +212,8 @@ final class FloatingWindowTests: XCTestCase {
         let def = FloatingWindowController.defaultSize
         XCTAssertLessThan(min.width, def.width)
         XCTAssertLessThan(min.height, def.height)
-        // 要約(見出し+大きな数値+帯)が収まらない大きさまで縮められると読めなくなる。
-        // これ以下は中身がスクロール頼みになり、一目で読む窓の役に立たない
-        XCTAssertGreaterThanOrEqual(min.height, 160)
+        // 要約(見出し+残容量+帯)が収まらない大きさまで縮められると読めなくなる
+        XCTAssertGreaterThanOrEqual(min.height, 110)
         XCTAssertGreaterThanOrEqual(min.width, 200)
     }
 

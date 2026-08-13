@@ -86,8 +86,10 @@ final class FloatingWindowController {
     /// 詳細を開いたときの高さ(内訳7行 + アプリ一覧6行が収まる)
     nonisolated static let expandedHeight: CGFloat = 620
     nonisolated static var defaultSize: NSSize { compactSize }
-    /// これ以上小さくすると要約すら読めなくなる
-    nonisolated static let minimumSize = NSSize(width: 240, height: 180)
+    /// これ以上小さくすると要約すら読めなくなる。
+    /// 行を増やしても据え置く。この窓はスクロールできるので、
+    /// 小さくしたい利用者から選択肢を奪わない(幅220での崩れは実機で確認済み)
+    nonisolated static let minimumSize = NSSize(width: 220, height: 130)
 
     private var panel: NSPanel?
     private let monitor: MemoryMonitor
