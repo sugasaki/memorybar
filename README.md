@@ -129,4 +129,7 @@ Spotlight は前方一致が強いため、先頭が `Memory` だと「Memory」
 ## 開発
 
 - 開発規約と実装上の注意: [AGENTS.md](AGENTS.md)([agent-project-template](https://github.com/sugasaki/agent-project-template)ベース)
-- 設計判断の記録: [Wiki](https://github.com/sugasaki/memorybar/wiki)(メモリ解放機能を実装しない判断、UI実装でつまずいた点)
+- 設計判断の記録: [Wiki](https://github.com/sugasaki/memorybar/wiki) — コードを読んでも分からない「なぜそうしたか / なぜそうしなかったか」
+  - [パネルの高さ問題](https://github.com/sugasaki/memorybar/wiki/%E3%83%91%E3%83%8D%E3%83%AB%E3%81%AE%E9%AB%98%E3%81%95%E5%95%8F%E9%A1%8C) — メニューパネルの高さを触る前に必ず読む(5回壊した)
+  - [配布と自動アップデートの変遷](https://github.com/sugasaki/memorybar/wiki/%E9%85%8D%E5%B8%83%E3%81%A8%E8%87%AA%E5%8B%95%E3%82%A2%E3%83%83%E3%83%97%E3%83%87%E3%83%BC%E3%83%88%E3%81%AE%E5%A4%89%E9%81%B7) — private + `gh` から public + 未認証 HTTPS へ切り替えた判断
+  - [メモリ解放機能を実装しない判断](https://github.com/sugasaki/memorybar/wiki/%E3%83%A1%E3%83%A2%E3%83%AA%E8%A7%A3%E6%94%BE%E6%A9%9F%E8%83%BD%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%97%E3%81%AA%E3%81%84%E5%88%A4%E6%96%AD) / [UI実装でつまずいた点](https://github.com/sugasaki/memorybar/wiki/UI%E5%AE%9F%E8%A3%85%E3%81%A7%E3%81%A4%E3%81%BE%E3%81%9A%E3%81%84%E3%81%9F%E7%82%B9)
