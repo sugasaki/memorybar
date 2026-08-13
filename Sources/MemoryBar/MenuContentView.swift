@@ -25,19 +25,29 @@ struct MenuContentView: View {
     }
 
     var body: some View {
-        // ウィンドウの大きさは内容の固有サイズに任せる。
-        // ScrollView で包んで高さを実測・指定する方式は、ウィンドウと内容の
-        // 大きさが別々に決まるため、縮まなかったときに差分が露出した(Issue #55)
-        content
+        // 画面に収まらないときだけスクロールで逃がす。
+        // 高さを決めるのは中の内容の実測値(sized)のままで、ScrollView は
+        // 器としてかぶせるだけ。ScrollView 自体を測ると縦の固有サイズが無く
+        // 潰れるため(Issue #41)、測る対象は変えないこと
+        ScrollView(.vertical) { sized }
+            .scrollBounceBehavior(.basedOnSize)
             .frame(width: 280)
             // 角丸をシステムの描画に任せると環境によって四角くなる(Issue #45)。
             // ただし SwiftUI 側で形を描くとシステムの縁と二重になる(Issue #49)。
             // 縁を1本にするため、ウィンドウのレイヤー側だけで丸める
             .background(.regularMaterial)
             .background(RoundedWindowBackground(cornerRadius: Self.cornerRadius))
+    }
+
+    /// 内容と、その実測高さをウィンドウへ伝える仕掛け
+    private var sized: some View {
+        content
+            .frame(width: 280)
             // ウィンドウは内容が伸びる方向にしか追随しないことがある(Issue #71)。
             // 縮んだときに置いていかれると、大きいままのウィンドウの中に
-            // 内容が浮いて二重の矩形に見えるため、実測した高さを反映する
+            // 内容が浮いて二重の矩形に見えるため、実測した高さを反映する。
+            // 画面に収まらないぶんは WindowHeightSync 側で切り詰められ、
+            // その差は上の ScrollView が引き受ける(Issue #68)
             .background(
                 GeometryReader { geometry in
                     WindowHeightSync(height: geometry.size.height)
@@ -283,11 +293,19 @@ struct WindowHeightSync: NSViewRepresentable {
             guard let window = nsView.window, window.isVisible else { return }
             // 測っているのは内容の高さ。タイトルバー等がある窓でもずれないよう、
             // フレーム基準へ変換してから比べる
-            let target = window.frameRect(
+            let natural = window.frameRect(
                 forContentRect: NSRect(x: 0, y: 0, width: window.frame.width, height: contentHeight)
             ).height
+            // 判定も記録も**丸めた後の高さ**で行う。丸める前の値を記録すると、
+            // 画面に収まらない間は現在値と一致しないまま記録だけが残り、
+            // 後から可視領域が広がっても伸び直せなくなる(解像度変更・別画面へ移動)
+            let visible =
+                window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+                ?? window.frame.insetBy(dx: 0, dy: -natural)
+            let targetFrame = Self.frame(current: window.frame, height: natural, within: visible)
             switch Self.action(
-                current: window.frame.height, target: target, requested: coordinator.requested)
+                current: window.frame.height, target: targetFrame.height,
+                requested: coordinator.requested)
             {
             case .none:
                 break
@@ -295,12 +313,7 @@ struct WindowHeightSync: NSViewRepresentable {
                 coordinator.requested = nil
             case .apply(let height):
                 coordinator.requested = height
-                let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
-                window.setFrame(
-                    Self.frame(
-                        current: window.frame, height: height,
-                        within: visible ?? window.frame.insetBy(dx: 0, dy: -height)),
-                    display: true)
+                window.setFrame(targetFrame, display: true)
             }
         }
     }
