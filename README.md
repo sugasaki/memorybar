@@ -17,7 +17,6 @@ macOSのメニューバーに常駐し、メモリの残容量・使用量をア
 
 **[MemoryBar.zip](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)** をダウンロードし、展開して `MemoryBar.app` を `/Applications` に置く。
 
-- privateリポジトリのため、GitHubにログインした状態で開くこと
 - Apple SiliconとIntelの両方で動くUniversalビルド。`main`への変更ごとにGitHub Actionsが自動で更新する
 - ログイン時に自動起動するには「システム設定 > 一般 > ログイン項目」に追加する
 
@@ -29,7 +28,7 @@ ad-hoc署名のため、**ブラウザでダウンロードした場合のみ**m
 - 「システム設定 > プライバシーとセキュリティ」の「このまま開く」
 - `xattr -dr com.apple.quarantine /Applications/MemoryBar.app`
 
-2回目以降は不要。アプリ内の更新は `gh` 経由で取得するため検疫属性が付かず、警告は出ない。
+2回目以降は不要。アプリ内の更新では差し替え時に検疫属性を取り除くため、警告は出ない。
 
 ## 自動アップデート
 
@@ -40,12 +39,7 @@ ad-hoc署名のため、**ブラウザでダウンロードした場合のみ**m
 - パネルの「更新を確認」でいつでも手動確認できる
 - ログは `~/Library/Logs/MemoryBar-update.log`
 
-privateリポジトリのため認証が要るが、**アプリはトークンを保持しない**。認証済みの [GitHub CLI](https://cli.github.com/) に委譲するので、次が前提になる。
-
-```sh
-brew install gh
-gh auth login
-```
+**認証は不要**で、アプリはトークンを一切持たない。公開リポジトリのリリースを素のHTTPSで取得する。追加のインストールも設定もいらない。
 
 ## 表示している値
 

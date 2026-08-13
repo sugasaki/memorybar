@@ -37,7 +37,7 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - `MemorySnapshot.swift` — 計測値から使用量・残量を導出する純粋ロジック
   - `DisplayMode.swift` — メニューバー表示モードとフォーマット
   - `MenuContentView.swift` — クリック時の詳細パネル
-  - `Updater.swift` — GitHub Releases からの更新確認・適用（`gh` CLI に認証を委譲）
+  - `Updater.swift` — GitHub Releases からの更新確認・適用（未認証の HTTPS で取得）
   - `UpdateController.swift` — 更新の進行状態と確認ダイアログ
 - `Sources/CMachSupport/` — Swift へ import できない Mach 定数を公開する最小 C shim
 - `Tests/MemoryBarTests/` — ユニットテスト（純粋ロジック + 実機サンプリング・Mach ポートリーク回帰）
@@ -53,9 +53,11 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
   - **取得できなかった値を正常値（`.normal` や 0）に置換しない**。「分からないのに正常と表示する」より「分からないと表示する」方を選ぶ
   - プレッシャー周りを変更したときの手動確認: ①起動直後の表示 ②負荷を変えて通常・注意・危険の遷移 ③スリープ復帰後も約1秒間隔の更新と通知が続くか ④Idle Wake Ups が過剰に増えていないか
 - 外部ライブラリを追加しない（追加が必要と考える場合は利用者に確認）
-- **配布と自動アップデート**: リポジトリは private のまま、`main` への push で GitHub Actions が Universal ビルドを `latest` リリースへ公開する（`.github/workflows/release.yml`）
-  - **アプリにトークンを埋め込まない**。認証は利用者の `gh` CLI に委譲する（Sparkle は appcast 取得に認証が要るため private では使わない）
-  - **GUI から起動した .app は PATH を継承しない**（Finder 起動時は `/usr/bin:/bin:/usr/sbin:/sbin` のみ）。`gh` などの外部コマンドは既定パスを明示的に探索する
+- **配布と自動アップデート**: `main` への push で GitHub Actions が Universal ビルドを `latest` リリースへ公開する（`.github/workflows/release.yml`）
+  - **リポジトリは public**。API もアセットも未認証の HTTPS で取れるため、アプリは認証を一切行わない（当然トークンも埋め込まない）
+  - private だった頃は `gh` CLI に認証を委譲していたが、**gh が入っていないマシンでは更新できなかった**ため public 化して廃止した（Issue #75）。private へ戻す判断をするなら、その制約が復活することを踏まえること
+  - **GUI から起動した .app は PATH を継承しない**（Finder 起動時は `/usr/bin:/bin:/usr/sbin:/sbin` のみ）。外部コマンドは絶対パスで呼ぶ（現在は `/usr/bin/ditto` のみ）
+  - 未認証の GitHub API は **60回/時/IP** に制限される。自動確認は6時間おきなので通常は当たらないが、確認間隔を詰めるときは考慮する
   - 更新判定は `make-app.sh` が Info.plist へ埋め込む `MBSourceCommit` とリリースの `targetCommitish` の比較で行う。**判定不能なときは更新を促さない**（ビルド元コミットが不明、`targetCommitish` がブランチ名など）。判定不能なまま促すと同じビルドの更新を延々と繰り返す
   - **`MenuBarExtra` のパネルの高さ**: `ScrollView` で包んで高さを実測・指定する方式は使わない。ScrollView は縦の固有サイズを持たないため、測ると潰れる(#41)、ウィンドウと内容が別々に決まって差分が露出する(#55)。
     ただし**「内容の自然な大きさに任せれば一致する」は成り立たなかった**(#71)。実測すると*大きくなる方向にしか*追随せず、詳細を開いたままパネルを閉じると以後ずっと大きいまま残る。そのため `WindowHeightSync` で内容の実測高さをウィンドウへ反映している。ここを触るときの必須条件:

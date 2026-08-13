@@ -164,7 +164,7 @@ struct MenuContentView: View {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    // gh の生出力がそのまま入ることがあるため、パネルが伸び続けないようにする。
+                    // 失敗の本文がそのまま入ることがあるため、パネルが伸び続けないようにする。
                     // 折り返させないと1行で切れて対処方法が読めない(Issue #73)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
