@@ -341,16 +341,19 @@ enum Updater {
 
         let outcome = Outcome<(Data, URLResponse)>()
         let done = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let data, let response {
                 outcome.set(.success((data, response)))
             } else {
                 outcome.set(.failure(error ?? UpdateError("応答がありませんでした。")))
             }
             done.signal()
-        }.resume()
+        }
+        task.resume()
         // タイムアウトは URLRequest 側で効くが、待ち側にも上限を置いて固まらせない
         guard done.wait(timeout: .now() + requestTimeout + 5) == .success else {
+            // 諦めた後も走り続けると、再試行のたびに通信が積み上がる
+            task.cancel()
             throw UpdateError("\(Int(requestTimeout)) 秒以内に応答がありませんでした。")
         }
         switch outcome.take() {
