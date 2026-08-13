@@ -46,12 +46,15 @@ final class LoginItemControllerTests: XCTestCase {
         return (defaults, suite)
     }
 
-    func test初回起動ではログイン項目を既定で有効にする() {
-        let stub = StubService(status: .notRegistered)
+    func test初回未登録を示すnotFoundからログイン項目を有効にする() {
+        // 実機では mainApp の初回登録前に .notFound が返る。
+        // これを登録不能と決めつけると、v0.5.17 のようにONへ切り替えられない。
+        let stub = StubService(status: .notFound)
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let controller = LoginItemController(service: stub.service, defaults: defaults)
 
+        XCTAssertNil(controller.statusMessage)
         controller.enableByDefaultIfNeeded()
 
         XCTAssertEqual(stub.registerCalls, 1)
@@ -86,7 +89,7 @@ final class LoginItemControllerTests: XCTestCase {
     }
 
     func test登録失敗時は有効と表示せず次回起動で再試行できる() {
-        let stub = StubService(status: .notRegistered)
+        let stub = StubService(status: .notFound)
         stub.registerError = StubError()
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -97,6 +100,20 @@ final class LoginItemControllerTests: XCTestCase {
         XCTAssertFalse(controller.isEnabled)
         XCTAssertFalse(defaults.bool(forKey: LoginItemController.configuredKey))
         XCTAssertTrue(controller.statusMessage?.contains("テスト用エラー") ?? false)
+    }
+
+    func test未登録を示すnotFoundで無効化してもエラーにしない() {
+        let stub = StubService(status: .notFound)
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let controller = LoginItemController(service: stub.service, defaults: defaults)
+
+        controller.setEnabled(false)
+
+        XCTAssertEqual(stub.unregisterCalls, 0)
+        XCTAssertFalse(controller.isEnabled)
+        XCTAssertNil(controller.statusMessage)
+        XCTAssertTrue(defaults.bool(forKey: LoginItemController.configuredKey))
     }
 
     func test許可待ちは登録済みとして表示しシステム設定を開ける() {
