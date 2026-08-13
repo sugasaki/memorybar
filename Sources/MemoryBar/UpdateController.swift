@@ -187,7 +187,7 @@ final class UpdateController {
         NSWorkspace.shared.open(Updater.releaseURL)
     }
 
-    /// gh の実行とダウンロードはブロッキングなので、メインスレッドを止めないよう別スレッドで行う
+    /// 通信とダウンロードはブロッキングなので、メインスレッドを止めないよう別スレッドで行う
     private static func fetchLatest() async -> Result<Updater.ReleaseInfo, Updater.UpdateError> {
         await Task.detached {
             do {

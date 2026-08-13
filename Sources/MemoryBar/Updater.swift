@@ -2,18 +2,26 @@ import Foundation
 
 /// GitHub Releases からの更新確認・適用。
 ///
-/// リポジトリが private のため認証が要るが、**アプリにトークンを持たせない**。
-/// 認証済みの `gh` CLI に委譲することで、資格情報の管理を GitHub CLI 側に任せる。
+/// リポジトリが public なので**認証は要らない**。API もアセットも素の HTTPS で取れる。
+/// アプリにトークンを持たせないのは変わらないが、そのために `gh` CLI へ委譲していた
+/// 経路は廃した(gh が入っていないマシンでは更新できなかったため: Issue #75)。
 enum Updater {
     static let repository = "sugasaki/memorybar"
     static let releaseTag = "latest"
     static let assetName = "MemoryBar.zip"
-    /// gh の応答待ちの上限。無応答のまま状態が固まるのを防ぐ
+    /// 応答待ちの上限。無応答のまま状態が固まるのを防ぐ
+    static let requestTimeout: TimeInterval = 60
+    /// 外部コマンド(展開に使う ditto)の待ち上限
     static let commandTimeout: TimeInterval = 60
 
     /// 更新元のリリースページ(自動更新が失敗したときの手動導線)
     static var releaseURL: URL {
         URL(string: "https://github.com/\(repository)/releases/\(releaseTag)")!
+    }
+
+    /// リリース情報の取得先。未認証でも読める(公開リポジトリのため)
+    static var releaseAPIURL: URL {
+        URL(string: "https://api.github.com/repos/\(repository)/releases/tags/\(releaseTag)")!
     }
 
     /// 差し替え処理のログ。アプリ終了後に別プロセスが書くため、作業ディレクトリの外に置く
@@ -27,6 +35,15 @@ enum Updater {
         let commit: String
         let publishedAt: String
         let assetNames: [String]
+        /// 資産のダウンロード先。名前から URL を組み立てず、API が返したものを使う
+        let assetURL: URL?
+
+        init(commit: String, publishedAt: String, assetNames: [String], assetURL: URL? = nil) {
+            self.commit = commit
+            self.publishedAt = publishedAt
+            self.assetNames = assetNames
+            self.assetURL = assetURL
+        }
 
         var hasAsset: Bool { assetNames.contains(Updater.assetName) }
     }
@@ -39,38 +56,6 @@ enum Updater {
             self.errorDescription = description
             self.recoverySuggestion = recovery
         }
-    }
-
-    // MARK: - gh CLI の探索
-
-    /// GUI から起動した .app は PATH を継承しないため、既知の場所を明示的に探す。
-    /// (Finder 起動時の PATH は /usr/bin:/bin:/usr/sbin:/sbin のみで gh は含まれない)
-    static func locateGH() -> URL? {
-        var candidates = [
-            "/opt/homebrew/bin/gh",  // Apple Silicon の Homebrew
-            "/usr/local/bin/gh",  // Intel の Homebrew
-            "/opt/local/bin/gh",  // MacPorts
-        ]
-        // ターミナルから起動された場合は PATH も尊重する。
-        // 相対パス由来の候補は cwd 次第で別物を実行しうるため除外する
-        if let path = ProcessInfo.processInfo.environment["PATH"] {
-            candidates += path.split(separator: ":")
-                .filter { $0.hasPrefix("/") }
-                .map { "\($0)/gh" }
-        }
-        return candidates.lazy
-            .filter { FileManager.default.isExecutableFile(atPath: $0) }
-            .first
-            .map { URL(fileURLWithPath: $0) }
-    }
-
-    private static func requireGH() throws -> URL {
-        guard let gh = locateGH() else {
-            throw UpdateError(
-                "GitHub CLI (gh) が見つかりません。",
-                recovery: "`brew install gh` でインストールし、`gh auth login` で認証してください。")
-        }
-        return gh
     }
 
     // MARK: - 更新確認
@@ -88,35 +73,45 @@ enum Updater {
     }
 
     static func fetchLatestRelease() throws -> ReleaseInfo {
-        let gh = try requireGH()
-        let result = try run(
-            gh,
-            [
-                "release", "view", releaseTag,
-                "--repo", repository,
-                "--json", "targetCommitish,publishedAt,assets",
-            ])
-        guard result.isSuccess else {
+        let (data, response) = try fetch(releaseAPIURL)
+        guard let status = (response as? HTTPURLResponse)?.statusCode, status == 200 else {
             throw UpdateError(
                 "リリース情報を取得できませんでした。",
-                recovery: ghFailureRecovery(result.output))
+                recovery: httpFailureRecovery(response as? HTTPURLResponse))
         }
+        return try parseRelease(data)
+    }
 
+    /// GitHub の Releases API の応答から必要な項目だけ取り出す
+    static func parseRelease(_ data: Data) throws -> ReleaseInfo {
         struct Payload: Decodable {
-            struct Asset: Decodable { let name: String }
+            struct Asset: Decodable {
+                let name: String
+                let browserDownloadURL: URL
+
+                enum CodingKeys: String, CodingKey {
+                    case name
+                    case browserDownloadURL = "browser_download_url"
+                }
+            }
             let targetCommitish: String
             let publishedAt: String
             let assets: [Asset]
+
+            enum CodingKeys: String, CodingKey {
+                case targetCommitish = "target_commitish"
+                case publishedAt = "published_at"
+                case assets
+            }
         }
-        guard let data = result.output.data(using: .utf8),
-            let payload = try? JSONDecoder().decode(Payload.self, from: data)
-        else {
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
             throw UpdateError("リリース情報の形式を解釈できませんでした。")
         }
         return ReleaseInfo(
             commit: payload.targetCommitish,
             publishedAt: payload.publishedAt,
-            assetNames: payload.assets.map(\.name))
+            assetNames: payload.assets.map(\.name),
+            assetURL: payload.assets.first { $0.name == assetName }?.browserDownloadURL)
     }
 
     /// 更新の要否。
@@ -154,10 +149,9 @@ enum Updater {
     /// 新版をダウンロードして展開・検証し、入れ替えスクリプトを起動してアプリを終了する。
     /// 自分自身を置き換えるため、実際の差し替えは別プロセスに任せる。
     static func downloadAndInstall(_ release: ReleaseInfo) throws {
-        guard release.hasAsset else {
+        guard release.hasAsset, let assetURL = release.assetURL else {
             throw UpdateError("最新リリースに \(assetName) が見つかりませんでした。")
         }
-        let gh = try requireGH()
         let appURL = Bundle.main.bundleURL
         guard appURL.pathExtension == "app" else {
             throw UpdateError(
@@ -181,24 +175,14 @@ enum Updater {
             if !installerLaunched { try? FileManager.default.removeItem(at: workDir) }
         }
 
-        let download = try run(
-            gh,
-            [
-                "release", "download", releaseTag,
-                "--repo", repository,
-                "--pattern", assetName,
-                "--dir", workDir.path,
-            ])
-        guard download.isSuccess else {
-            throw UpdateError(
-                "更新のダウンロードに失敗しました。", recovery: ghFailureRecovery(download.output))
-        }
+        let archiveURL = workDir.appendingPathComponent(assetName)
+        try downloadAsset(from: assetURL, to: archiveURL)
 
         // ditto は macOS 標準で、.app のメタデータを保ったまま展開できる
         let unpackDir = workDir.appendingPathComponent("unpacked")
         let unpack = try run(
             URL(fileURLWithPath: "/usr/bin/ditto"),
-            ["-x", "-k", workDir.appendingPathComponent(assetName).path, unpackDir.path])
+            ["-x", "-k", archiveURL.path, unpackDir.path])
         guard unpack.isSuccess else {
             throw UpdateError("更新パッケージを展開できませんでした。\n\(unpack.output)")
         }
@@ -315,7 +299,7 @@ enum Updater {
             /bin/mv "$APP_PATH" "$BACKUP_CANDIDATE"
             BACKUP_PATH="$BACKUP_CANDIDATE"
             /usr/bin/ditto "$NEW_APP_PATH" "$APP_PATH"
-            # gh 経由のダウンロードには付かないが、念のため検疫属性を除去する
+            # ダウンロード経路によっては検疫属性が付き、次回起動が隔離扱いになる
             /usr/bin/xattr -dr com.apple.quarantine "$APP_PATH" >/dev/null 2>&1 || true
             /bin/rm -rf "$BACKUP_PATH"
             BACKUP_PATH=""
@@ -338,6 +322,155 @@ enum Updater {
             String(ProcessInfo.processInfo.processIdentifier), installLogURL.path,
         ]
         try process.run()
+    }
+
+    // MARK: - 取得
+
+    /// 同期で取得する。呼び出し元(UpdateController / CLI)が既に別スレッドにいるため、
+    /// ここを async にすると呼び出し側の構造を広く変えることになる
+    private static func fetch(_ url: URL) throws -> (Data, URLResponse) {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = requestTimeout
+        // GitHub の API は Accept でバージョンを固定できる。
+        // 指定しないと将来の既定版が変わったときに黙って壊れうる
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        request.setValue("MemoryBar", forHTTPHeaderField: "User-Agent")
+        // 前回の応答が残っていると、公開直後の更新に気づけない
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        let outcome = Outcome<(Data, URLResponse)>()
+        let done = DispatchSemaphore(value: 0)
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let data, let response {
+                outcome.set(.success((data, response)))
+            } else {
+                outcome.set(.failure(error ?? UpdateError("応答がありませんでした。")))
+            }
+            done.signal()
+        }
+        task.resume()
+        // タイムアウトは URLRequest 側で効くが、待ち側にも上限を置いて固まらせない
+        guard done.wait(timeout: .now() + requestTimeout + 5) == .success else {
+            // 諦めた後も走り続けると、再試行のたびに通信が積み上がる
+            task.cancel()
+            throw UpdateError("\(Int(requestTimeout)) 秒以内に応答がありませんでした。")
+        }
+        switch outcome.take() {
+        case .success(let value): return value
+        case .failure(let error): throw networkError(error)
+        case nil: throw UpdateError("応答がありませんでした。")
+        }
+    }
+
+    /// 資産をファイルへ落とす。数MBあるためメモリに全部載せない
+    private static func downloadAsset(from url: URL, to destination: URL) throws {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = requestTimeout
+        request.setValue("MemoryBar", forHTTPHeaderField: "User-Agent")
+
+        struct Downloaded { let staged: URL; let response: HTTPURLResponse? }
+        let outcome = Outcome<Downloaded>()
+        let done = DispatchSemaphore(value: 0)
+        let task = URLSession.shared.downloadTask(with: request) { tempURL, urlResponse, error in
+            defer { done.signal() }
+            let http = urlResponse as? HTTPURLResponse
+            guard let tempURL else {
+                outcome.set(
+                    .failure(
+                        error
+                            ?? UpdateError(
+                                "更新のダウンロードに失敗しました。",
+                                recovery: httpFailureRecovery(http))))
+                return
+            }
+            // 完了ハンドラを抜けると消えるため、ここで退避する
+            let staged = destination.appendingPathExtension("part")
+            do {
+                try? FileManager.default.removeItem(at: staged)
+                try FileManager.default.moveItem(at: tempURL, to: staged)
+                outcome.set(.success(Downloaded(staged: staged, response: http)))
+            } catch {
+                outcome.set(.failure(error))
+            }
+        }
+        task.resume()
+        guard done.wait(timeout: .now() + requestTimeout + 5) == .success else {
+            task.cancel()
+            throw UpdateError("\(Int(requestTimeout)) 秒以内にダウンロードが終わりませんでした。")
+        }
+        let downloaded: Downloaded
+        switch outcome.take() {
+        case .success(let value): downloaded = value
+        case .failure(let error): throw networkError(error)
+        case nil: throw UpdateError("更新のダウンロードに失敗しました。")
+        }
+        // 4xx/5xx でも本文がファイルとして落ちてくるため、状態行を必ず確かめる
+        guard downloaded.response?.statusCode == 200 else {
+            try? FileManager.default.removeItem(at: downloaded.staged)
+            throw UpdateError(
+                "更新のダウンロードに失敗しました。",
+                recovery: httpFailureRecovery(downloaded.response))
+        }
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: downloaded.staged, to: destination)
+    }
+
+    /// 完了ハンドラとの受け渡し。セマフォで待ち合わせるので同時に触ることはないが、
+    /// コンパイラには見えないため錠を持たせて明示する
+    private final class Outcome<Value>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: Result<Value, Error>?
+
+        func set(_ value: Result<Value, Error>) {
+            lock.lock()
+            defer { lock.unlock() }
+            stored = value
+        }
+
+        /// 取り出したら手放す。名前どおり一度きりにして、
+        /// 受け取った Data を用が済んだ後も抱え込まないようにする
+        func take() -> Result<Value, Error>? {
+            lock.lock()
+            defer { lock.unlock() }
+            let value = stored
+            stored = nil
+            return value
+        }
+    }
+
+    /// 通信の失敗を、利用者が対処を判断できる文言にする
+    static func networkError(_ error: Error) -> UpdateError {
+        if let error = error as? UpdateError { return error }
+        let urlError = error as? URLError
+        switch urlError?.code {
+        case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
+            .cannotFindHost, .dnsLookupFailed:
+            return UpdateError(
+                "GitHub に接続できませんでした。", recovery: "ネットワークの状態を確認して、もう一度お試しください。")
+        case .timedOut:
+            return UpdateError(
+                "接続がタイムアウトしました。", recovery: "しばらく待ってから、もう一度お試しください。")
+        default:
+            return UpdateError(error.localizedDescription)
+        }
+    }
+
+    /// HTTP の応答から対処を導く
+    static func httpFailureRecovery(_ response: HTTPURLResponse?) -> String {
+        guard let status = response?.statusCode else {
+            return "GitHub からの応答を確認できませんでした。"
+        }
+        switch status {
+        case 404:
+            return "まだ \(releaseTag) リリースが公開されていない可能性があります。"
+        case 403, 429:
+            // 未認証のアクセスは 60回/時 に制限される。自動確認は6時間おきなので
+            // 通常は当たらないが、同じ回線から何度も試すと当たりうる
+            return "GitHub の利用制限に達した可能性があります。しばらく待ってから、もう一度お試しください。"
+        default:
+            return "GitHub が \(status) を返しました。しばらく待ってから、もう一度お試しください。"
+        }
     }
 
     // MARK: - プロセス実行
@@ -377,18 +510,4 @@ enum Updater {
             output: timedOut ? "\(commandTimeout) 秒以内に応答がありませんでした。\n\(output)" : output)
     }
 
-    /// gh の失敗理由を利用者が対処できる文言に変換する
-    static func ghFailureRecovery(_ output: String) -> String {
-        let lowered = output.lowercased()
-        if lowered.contains("auth") || lowered.contains("logged in")
-            || lowered.contains("authentication")
-        {
-            return "`gh auth login` で GitHub にログインしてください。"
-        }
-        if lowered.contains("release not found") || lowered.contains("not found") {
-            return "まだ \(releaseTag) リリースが公開されていない可能性があります。"
-        }
-        let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return detail.isEmpty ? "gh コマンドが失敗しました。" : detail
-    }
 }

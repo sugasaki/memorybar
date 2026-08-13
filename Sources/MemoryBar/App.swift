@@ -128,12 +128,7 @@ enum Main {
 
     private static func printUpdateStatus() {
         print("現在のビルド: \(UpdateController.currentVersionLabel)")
-        guard let gh = Updater.locateGH() else {
-            FileHandle.standardError.write(
-                Data("gh が見つかりません(PATH非依存の既定パスにも存在しない)\n".utf8))
-            exit(1)
-        }
-        print("gh: \(gh.path)")
+        print("取得元: \(Updater.releaseAPIURL.absoluteString)")
         do {
             let release = try Updater.fetchLatestRelease()
             print("最新リリース: \(Updater.shortCommit(release.commit)) (\(release.publishedAt))")

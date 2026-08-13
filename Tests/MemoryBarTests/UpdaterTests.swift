@@ -74,19 +74,74 @@ final class UpdaterTests: XCTestCase {
         XCTAssertEqual(Updater.shortCommit(""), "unknown")
     }
 
-    func test認証エラーはログインを促す文言になる() {
-        let recovery = Updater.ghFailureRecovery("error: not logged in to any GitHub hosts")
-        XCTAssertTrue(recovery.contains("gh auth login"))
+    func testリリース応答から必要な項目を取り出せる() throws {
+        // GitHub の Releases API が返す形。snake_case のキー名を取り違えると
+        // 常に「形式を解釈できません」になるため、実際の応答と同じ形で確かめる
+        let json = """
+            {
+              "tag_name": "latest",
+              "target_commitish": "5088ee9d7586f36a4538d987434b775780273554",
+              "published_at": "2026-08-13T04:24:07Z",
+              "assets": [
+                {
+                  "name": "MemoryBar.zip",
+                  "browser_download_url":
+                    "https://github.com/sugasaki/memorybar/releases/download/latest/MemoryBar.zip"
+                }
+              ]
+            }
+            """
+        let info = try Updater.parseRelease(Data(json.utf8))
+        XCTAssertEqual(info.commit, "5088ee9d7586f36a4538d987434b775780273554")
+        XCTAssertEqual(info.publishedAt, "2026-08-13T04:24:07Z")
+        XCTAssertTrue(info.hasAsset)
+        // 名前から URL を組み立てず、API が返したものを使う
+        XCTAssertEqual(
+            info.assetURL?.absoluteString,
+            "https://github.com/sugasaki/memorybar/releases/download/latest/MemoryBar.zip")
+    }
+
+    func test資産が無いリリースはダウンロード先を持たない() throws {
+        let json = """
+            {"target_commitish":"abcdef0","published_at":"2026-08-13T04:24:07Z","assets":[]}
+            """
+        let info = try Updater.parseRelease(Data(json.utf8))
+        XCTAssertFalse(info.hasAsset)
+        XCTAssertNil(info.assetURL)
+    }
+
+    func test解釈できない応答はエラーになる() {
+        // HTML のエラーページなどが返ってきたときに、黙って空の情報にしない
+        XCTAssertThrowsError(try Updater.parseRelease(Data("<html>oops</html>".utf8)))
     }
 
     func testリリース未公開のエラーは原因が分かる文言になる() {
-        let recovery = Updater.ghFailureRecovery("release not found")
-        XCTAssertTrue(recovery.contains("latest"))
+        let response = HTTPURLResponse(
+            url: Updater.releaseAPIURL, statusCode: 404, httpVersion: nil, headerFields: nil)
+        XCTAssertTrue(Updater.httpFailureRecovery(response).contains("latest"))
     }
 
-    func test想定外のエラーは出力をそのまま返す() {
-        XCTAssertEqual(Updater.ghFailureRecovery("  boom  "), "boom")
-        XCTAssertFalse(Updater.ghFailureRecovery("").isEmpty)
+    func test利用制限は待てば直ると分かる文言になる() {
+        // 未認証のアクセスは 60回/時 に制限される
+        for status in [403, 429] {
+            let response = HTTPURLResponse(
+                url: Updater.releaseAPIURL, statusCode: status, httpVersion: nil,
+                headerFields: nil)
+            XCTAssertTrue(
+                Updater.httpFailureRecovery(response).contains("制限"), "status=\(status)")
+        }
+    }
+
+    func test通信できないときはネットワークを疑う文言になる() {
+        let offline = Updater.networkError(URLError(.notConnectedToInternet))
+        XCTAssertTrue(offline.recoverySuggestion?.contains("ネットワーク") ?? false)
+
+        let timedOut = Updater.networkError(URLError(.timedOut))
+        XCTAssertTrue(timedOut.errorDescription?.contains("タイムアウト") ?? false)
+    }
+
+    func test応答が無いときも状態を確かめる文言になる() {
+        XCTAssertFalse(Updater.httpFailureRecovery(nil).isEmpty)
     }
 
     /// インストールが呼ばれたかを別スレッドからでも安全に記録する
