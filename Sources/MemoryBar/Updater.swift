@@ -428,10 +428,14 @@ enum Updater {
             stored = value
         }
 
+        /// 取り出したら手放す。名前どおり一度きりにして、
+        /// 受け取った Data を用が済んだ後も抱え込まないようにする
         func take() -> Result<Value, Error>? {
             lock.lock()
             defer { lock.unlock() }
-            return stored
+            let value = stored
+            stored = nil
+            return value
         }
     }
 
