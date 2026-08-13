@@ -24,34 +24,63 @@ struct MenuContentView: View {
         return state.availableRelease != nil || state.isBusy || state.failureDetail != nil
     }
 
+    /// 内容の実測高さ。根の理想サイズと、ウィンドウへ反映する高さの両方の源
+    @State private var contentHeight: CGFloat?
+    /// パネルに使える高さの上限(内容座標系)。画面の可視領域から換算する。
+    /// 分かるまでは制限しない
+    @State private var heightBudget: CGFloat?
+
+    /// 根とウィンドウに与える高さ。内容の実測を画面に収まる範囲へ丸める。
+    /// 実測前は nil(制約しない)。
+    /// 下限未満の値は contentHeight / heightBudget に入る前に捨てているので、
+    /// ここで丸め上げはしない(丸め上げると、壊れた測定値を「100pt のパネル」
+    /// という本物の目標に昇格させてしまう)
+    private var resolvedHeight: CGFloat? {
+        contentHeight.map { min($0, heightBudget ?? .infinity) }
+    }
+
     var body: some View {
-        // 画面に収まらないときだけスクロールで逃がす。
-        // 高さを決めるのは中の内容の実測値(sized)のままで、ScrollView は
-        // 器としてかぶせるだけ。ScrollView 自体を測ると縦の固有サイズが無く
-        // 潰れるため(Issue #41)、測る対象は変えないこと
+        // 画面に収まらないときだけスクロールで逃がす(#68)。
+        //
+        // ウィンドウの大きさは MenuBarExtra が根のビューへ「現在の大きさ」を
+        // 提案し、返った答えを次の大きさとして保持する(#78 の実測)。
+        // 提案をそのまま通す作り(素の ScrollView や min/max だけの frame)だと、
+        // システムが保持している古い大きさを**こだまのように反射**して固定され、
+        // 画面構成の変更などで狂った値が入るとウィンドウだけ大きいまま戻らなく
+        // なる(v0.5.13 の症状)。理想サイズが不定だと 10pt で開くことも実測した。
+        // 高さを実測値で**固定**し、どんな提案にも同じ答えを返すことで、
+        // システム側の保持値をこちらの値へ収束させる
         ScrollView(.vertical) { sized }
             .scrollBounceBehavior(.basedOnSize)
             .frame(width: 280)
+            .frame(height: resolvedHeight)
             // 角丸をシステムの描画に任せると環境によって四角くなる(Issue #45)。
             // ただし SwiftUI 側で形を描くとシステムの縁と二重になる(Issue #49)。
             // 縁を1本にするため、ウィンドウのレイヤー側だけで丸める
             .background(.regularMaterial)
             .background(RoundedWindowBackground(cornerRadius: Self.cornerRadius))
+            // ウィンドウは内容が伸びる方向にしか追随しないことがある(Issue #71)。
+            // 縮んだときに置いていかれると内容が切れたままになるため、
+            // 実測した高さを反映する。受け付けられない場合は有限回で引き下がり、
+            // 状況が変わったら挑み直す(HeightGovernor)
+            .background(
+                WindowHeightSync(
+                    contentHeight: resolvedHeight,
+                    onBudgetChange: { budget in
+                        if heightBudget != budget { heightBudget = budget }
+                    }))
     }
 
-    /// 内容と、その実測高さをウィンドウへ伝える仕掛け
+    /// 内容そのもの。実測した高さを contentHeight へ届ける。
+    /// 測るのは器の ScrollView ではなく中身(器を測ると潰れる: Issue #41)。
+    /// 壊れた測定値(下限未満)は捨てて、直前の正しい値を保つ
     private var sized: some View {
         content
             .frame(width: 280)
-            // ウィンドウは内容が伸びる方向にしか追随しないことがある(Issue #71)。
-            // 縮んだときに置いていかれると、大きいままのウィンドウの中に
-            // 内容が浮いて二重の矩形に見えるため、実測した高さを反映する。
-            // 画面に収まらないぶんは WindowHeightSync 側で切り詰められ、
-            // その差は上の ScrollView が引き受ける(Issue #68)
-            .background(
-                GeometryReader { geometry in
-                    WindowHeightSync(height: geometry.size.height)
-                })
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                guard height >= WindowHeightSync.minimumHeight else { return }
+                if contentHeight != height { contentHeight = height }
+            }
     }
 
     private var content: some View {
@@ -217,46 +246,69 @@ struct MenuContentView: View {
 }
 
 
-/// 実測した内容の高さをウィンドウへ反映する。
+/// ウィンドウの高さ要求の判断。
+/// 「同じ高さを繰り返し要求して AppKit と喧嘩し続けない」ことと、
+/// 「一度諦めても状況が変われば立て直す」ことを両立させる(#71, #78)。
+/// 高さはいずれもウィンドウのフレーム基準
+final class HeightGovernor {
+    /// 同じ目標を続けて要求する上限。受け付けられない場合に無限に往復しない
+    static let maxAttempts = 3
+    /// これ以下の差は見えず、往復の原因にしかならない
+    static let tolerance: CGFloat = 0.5
+
+    /// 直前に要求した高さ
+    private var requested: CGFloat?
+    private var attempts = 0
+    /// 直前に要求したときのウィンドウの高さ。ここから動いていたら
+    /// 「外から動かされた」= 諦めの根拠が古い、と判断する
+    private var baseline: CGFloat?
+
+    /// 適用すべき高さを返す。nil は「何もしない」
+    func decide(current: CGFloat, target: CGFloat) -> CGFloat? {
+        guard target >= WindowHeightSync.minimumHeight else { return nil }
+        // 一致したら要求の記録を消す。消さないと同じ高さへ二度と
+        // 戻せなくなる(#71 で「2回目の折りたたみが効かない」として実際に起きた)
+        if abs(current - target) <= Self.tolerance {
+            requested = nil
+            attempts = 0
+            baseline = nil
+            return nil
+        }
+        // 要求後にウィンドウが外から動いた(解像度変更・システムの再配置)なら、
+        // 諦めの根拠が古いので数え直す。恒久的に諦めると、システムが
+        // 大きくしたウィンドウを直す機会が二度と来ない(#78)
+        if let baseline, abs(current - baseline) > Self.tolerance {
+            requested = nil
+            attempts = 0
+        }
+        if let requested, abs(requested - target) <= Self.tolerance {
+            guard attempts < Self.maxAttempts else { return nil }
+            attempts += 1
+        } else {
+            requested = target
+            attempts = 1
+        }
+        baseline = current
+        return target
+    }
+}
+
+/// 実測した内容の高さをウィンドウへ反映し、パネルに使える高さを報告する。
 ///
 /// `MenuBarExtra(.window)` のウィンドウは、この経路では**大きくなる方向にしか**
 /// 内容に追随しない(実測: 詳細を開いたままパネルを閉じると、以後ずっと
-/// 開いた分の高さのまま残り、開き直しても戻らない)。#55 でスクロールを外して
-/// 「大きさは内容に任せる」方式にしたため、追随しないと差分がそのまま見える
+/// 開いた分の高さのまま残り、開き直しても戻らない: #71)。さらに画面構成が
+/// 変わると、システム側がウィンドウを内容と無関係な大きさへ再配置することが
+/// ある(#78)。どちらも実測高さを直接反映して立て直す
 struct WindowHeightSync: NSViewRepresentable {
-    let height: CGFloat
+    /// 反映したい高さ(内容座標系。画面の上限で丸めた後の値)。実測前は nil
+    let contentHeight: CGFloat?
+    /// パネルに使える高さ(内容座標系)が分かる・変わるたびに呼ばれる
+    let onBudgetChange: (CGFloat) -> Void
 
     /// これを下回る測定値は反映しない。
     /// 測定が壊れたときにウィンドウを潰さないための歯止め(Issue #41 の再発防止)
     nonisolated static let minimumHeight: CGFloat = 100
-
-    /// 次に何をするか
-    enum Action: Equatable {
-        /// 何もしない
-        case none
-        /// 一致しているので、要求済みの記録を消す。
-        /// 同じ高さを次に要求できるようにするため(消さないと2回目の折りたたみが効かない)
-        case clearRequest
-        /// この高さを要求する
-        case apply(CGFloat)
-    }
-
-    /// 現在の高さ・望む高さ・直前に要求した高さから、次の動作を決める。
-    /// 高さはいずれもウィンドウのフレーム基準(内容基準ではない)
-    nonisolated static func action(current: CGFloat, target: CGFloat, requested: CGFloat?)
-        -> Action
-    {
-        // 0.5pt 未満の差は見えず、往復の原因にしかならない
-        guard abs(current - target) > 0.5 else {
-            return requested == nil ? .none : .clearRequest
-        }
-        guard target >= minimumHeight else { return .none }
-        // 同じ高さを繰り返し要求するのは、AppKit 側が受け付けていない場合。
-        // 何度も設定し直しても直らないので諦める(無限ループを避ける)。
-        // 一度でも一致すれば上の分岐で記録が消えるので、諦めが恒久化はしない
-        if let requested, abs(requested - target) < 0.5 { return .none }
-        return .apply(target)
-    }
 
     /// 上端を固定して下方向に伸縮させたフレーム。
     /// メニューバーの下に貼り付いた位置を動かさないため。
@@ -273,48 +325,77 @@ struct WindowHeightSync: NSViewRepresentable {
         return frame
     }
 
-    final class Coordinator {
-        /// 直前に要求した高さ(ウィンドウのフレーム基準)
-        var requested: CGFloat?
-    }
+    func makeNSView(context: Context) -> ScreenAwareView { ScreenAwareView() }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView { NSView() }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        // 明らかに使えない測定値は、非同期ホップを積む前に捨てる
-        guard height >= Self.minimumHeight else { return }
-        let contentHeight = height
-        let coordinator = context.coordinator
+    func updateNSView(_ view: ScreenAwareView, context: Context) {
+        view.contentHeight = contentHeight
+        view.onBudgetChange = onBudgetChange
         // 更新の途中ではウィンドウの大きさがまだ変わっていないため、
         // レイアウトが落ち着く次のループで見る
-        DispatchQueue.main.async {
-            guard let window = nsView.window, window.isVisible else { return }
+        DispatchQueue.main.async { [weak view] in view?.sync() }
+    }
+
+    /// 登録した観測を寿命に合わせて確実に外すための持ち手。
+    /// (MainActor 隔離のビューは deinit から自分のプロパティへ触れないため)
+    private final class ObservationHolder {
+        private let token: NSObjectProtocol
+        init(_ token: NSObjectProtocol) { self.token = token }
+        deinit { NotificationCenter.default.removeObserver(token) }
+    }
+
+    /// ウィンドウを持つ側の実務。画面構成の変更もここで受ける
+    final class ScreenAwareView: NSView {
+        var contentHeight: CGFloat?
+        var onBudgetChange: ((CGFloat) -> Void)?
+        let governor = HeightGovernor()
+        private var screenObservation: ObservationHolder?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // 解像度や画面の増減はイベントで知る。1秒ごとの再計算だけに頼ると、
+            // 変化の直後に古い可視領域で丸めた結果がしばらく残る(#78)
+            guard window != nil, screenObservation == nil else { return }
+            screenObservation = ObservationHolder(
+                NotificationCenter.default.addObserver(
+                    forName: NSApplication.didChangeScreenParametersNotification,
+                    object: nil, queue: .main
+                ) { [weak self] _ in
+                    // queue: .main でもコンパイラ上は MainActor と同値ではないため、
+                    // 仮定(assumeIsolated)ではなくホップで渡す
+                    Task { @MainActor in self?.sync() }
+                })
+        }
+
+        func sync() {
+            guard let window, window.isVisible else { return }
+            let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+            if let visible {
+                // パネルに使える内容の高さ。タイトルバー等の分を除いて伝える。
+                // 画面遷移中の壊れた値(下限未満)で根を潰さないよう、伝えない
+                let budget = window.contentRect(
+                    forFrameRect: NSRect(
+                        x: 0, y: 0, width: window.frame.width, height: visible.height)
+                ).height
+                if budget >= WindowHeightSync.minimumHeight { onBudgetChange?(budget) }
+            }
+            guard let contentHeight else { return }
             // 測っているのは内容の高さ。タイトルバー等がある窓でもずれないよう、
             // フレーム基準へ変換してから比べる
-            let natural = window.frameRect(
-                forContentRect: NSRect(x: 0, y: 0, width: window.frame.width, height: contentHeight)
+            let target = window.frameRect(
+                forContentRect: NSRect(
+                    x: 0, y: 0, width: window.frame.width, height: contentHeight)
             ).height
-            // 判定も記録も**丸めた後の高さ**で行う。丸める前の値を記録すると、
+            // 判定も記録も丸めた後の高さで行う。丸める前の値で記録すると、
             // 画面に収まらない間は現在値と一致しないまま記録だけが残り、
-            // 後から可視領域が広がっても伸び直せなくなる(解像度変更・別画面へ移動)
-            let visible =
-                window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
-                ?? window.frame.insetBy(dx: 0, dy: -natural)
-            let targetFrame = Self.frame(current: window.frame, height: natural, within: visible)
-            switch Self.action(
-                current: window.frame.height, target: targetFrame.height,
-                requested: coordinator.requested)
-            {
-            case .none:
-                break
-            case .clearRequest:
-                coordinator.requested = nil
-            case .apply(let height):
-                coordinator.requested = height
-                window.setFrame(targetFrame, display: true)
-            }
+            // 後から可視領域が広がっても伸び直せなくなる
+            let clamped = visible.map { min(target, $0.height) } ?? target
+            guard let height = governor.decide(current: window.frame.height, target: clamped)
+            else { return }
+            window.setFrame(
+                WindowHeightSync.frame(
+                    current: window.frame, height: height,
+                    within: visible ?? window.frame.insetBy(dx: 0, dy: -height)),
+                display: true)
         }
     }
 }
