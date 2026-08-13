@@ -35,6 +35,13 @@ struct MenuContentView: View {
             // 縁を1本にするため、ウィンドウのレイヤー側だけで丸める
             .background(.regularMaterial)
             .background(RoundedWindowBackground(cornerRadius: Self.cornerRadius))
+            // ウィンドウは内容が伸びる方向にしか追随しないことがある(Issue #71)。
+            // 縮んだときに置いていかれると、大きいままのウィンドウの中に
+            // 内容が浮いて二重の矩形に見えるため、実測した高さを反映する
+            .background(
+                GeometryReader { geometry in
+                    WindowHeightSync(height: geometry.size.height)
+                })
     }
 
     private var content: some View {
@@ -191,6 +198,63 @@ struct MenuContentView: View {
 
 }
 
+
+/// 実測した内容の高さをウィンドウへ反映する。
+///
+/// `MenuBarExtra(.window)` のウィンドウは、この経路では**大きくなる方向にしか**
+/// 内容に追随しない(実測: 詳細を開いたままパネルを閉じると、以後ずっと
+/// 開いた分の高さのまま残り、開き直しても戻らない)。#55 でスクロールを外して
+/// 「大きさは内容に任せる」方式にしたため、追随しないと差分がそのまま見える
+struct WindowHeightSync: NSViewRepresentable {
+    let height: CGFloat
+
+    /// これを下回る測定値は反映しない。
+    /// 測定が壊れたときにウィンドウを潰さないための歯止め(Issue #41 の再発防止)
+    nonisolated static let minimumHeight: CGFloat = 100
+
+    /// 反映すべきか。0.5pt 未満の差は見えず、往復の原因にしかならない
+    nonisolated static func shouldApply(current: CGFloat, target: CGFloat, lastApplied: CGFloat?)
+        -> Bool
+    {
+        guard target >= minimumHeight else { return false }
+        guard abs(current - target) > 0.5 else { return false }
+        // 同じ高さを繰り返し要求するのは、AppKit 側が受け付けていない場合。
+        // 何度も設定し直しても直らないので諦める(無限ループを避ける)
+        if let lastApplied, abs(lastApplied - target) < 0.5 { return false }
+        return true
+    }
+
+    /// 上端を固定して下方向に伸縮させたフレーム。
+    /// メニューバーの下に貼り付いた位置を動かさないため
+    nonisolated static func frame(current: NSRect, height: CGFloat) -> NSRect {
+        NSRect(x: current.minX, y: current.maxY - height, width: current.width, height: height)
+    }
+
+    final class Coordinator {
+        var lastApplied: CGFloat?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        let target = height
+        let coordinator = context.coordinator
+        // 更新の途中ではウィンドウの大きさがまだ変わっていないため、
+        // レイアウトが落ち着く次のループで見る
+        DispatchQueue.main.async {
+            guard let window = nsView.window, window.isVisible else { return }
+            guard
+                Self.shouldApply(
+                    current: window.frame.height, target: target,
+                    lastApplied: coordinator.lastApplied)
+            else { return }
+            coordinator.lastApplied = target
+            window.setFrame(Self.frame(current: window.frame, height: target), display: true)
+        }
+    }
+}
 
 /// ホストしているウィンドウを透明にし、角丸マスクを適用する。
 ///
