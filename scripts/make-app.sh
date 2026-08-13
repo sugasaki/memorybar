@@ -125,4 +125,4 @@ SHORT_COMMIT="${APP_COMMIT:0:7}"
 case "$APP_COMMIT" in *-dirty) SHORT_COMMIT="${SHORT_COMMIT}-dirty" ;; esac
 echo "生成完了: $APP_DIR (version=$APP_VERSION, build=$APP_BUILD, commit=$SHORT_COMMIT)"
 echo "インストール: cp -R \"$APP_DIR\" /Applications/"
-echo "ログイン時に自動起動するには: システム設定 > 一般 > ログイン項目 に追加"
+echo "初回起動時にログイン項目へ自動登録されます（アプリの設定でOFFにできます）"

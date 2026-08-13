@@ -260,6 +260,7 @@ struct MemoryBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var monitor: MemoryMonitor
     @State private var updateController = UpdateController.shared
+    @State private var loginItemController = LoginItemController.shared
     @State private var floatingController: FloatingWindowController
     @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
 
@@ -280,6 +281,7 @@ struct MemoryBarApp: App {
         MenuBarExtra {
             MenuContentView(
                 monitor: monitor, updateController: updateController,
+                loginItemController: loginItemController,
                 floatingController: floatingController)
         } label: {
             // Label(_:systemImage:) を渡すと SwiftUI はアイコンだけを
@@ -303,7 +305,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // swift runなど.appバンドル外から起動してもDockに出さない
         NSApp.setActivationPolicy(.accessory)
         // メニューのコンテンツは初回クリックまで生成されないため、
-        // 起動時の確認はビューの task ではなくここで行う
+        // 起動時の処理はビューの task ではなくここで行う
+        LoginItemController.shared.enableByDefaultIfNeeded()
         UpdateController.shared.checkAtLaunchIfEnabled()
     }
 }
