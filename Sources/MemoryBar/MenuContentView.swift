@@ -35,6 +35,13 @@ struct MenuContentView: View {
             // 縁を1本にするため、ウィンドウのレイヤー側だけで丸める
             .background(.regularMaterial)
             .background(RoundedWindowBackground(cornerRadius: Self.cornerRadius))
+            // ウィンドウは内容が伸びる方向にしか追随しないことがある(Issue #71)。
+            // 縮んだときに置いていかれると、大きいままのウィンドウの中に
+            // 内容が浮いて二重の矩形に見えるため、実測した高さを反映する
+            .background(
+                GeometryReader { geometry in
+                    WindowHeightSync(height: geometry.size.height)
+                })
     }
 
     private var content: some View {
@@ -191,6 +198,105 @@ struct MenuContentView: View {
 
 }
 
+
+/// 実測した内容の高さをウィンドウへ反映する。
+///
+/// `MenuBarExtra(.window)` のウィンドウは、この経路では**大きくなる方向にしか**
+/// 内容に追随しない(実測: 詳細を開いたままパネルを閉じると、以後ずっと
+/// 開いた分の高さのまま残り、開き直しても戻らない)。#55 でスクロールを外して
+/// 「大きさは内容に任せる」方式にしたため、追随しないと差分がそのまま見える
+struct WindowHeightSync: NSViewRepresentable {
+    let height: CGFloat
+
+    /// これを下回る測定値は反映しない。
+    /// 測定が壊れたときにウィンドウを潰さないための歯止め(Issue #41 の再発防止)
+    nonisolated static let minimumHeight: CGFloat = 100
+
+    /// 次に何をするか
+    enum Action: Equatable {
+        /// 何もしない
+        case none
+        /// 一致しているので、要求済みの記録を消す。
+        /// 同じ高さを次に要求できるようにするため(消さないと2回目の折りたたみが効かない)
+        case clearRequest
+        /// この高さを要求する
+        case apply(CGFloat)
+    }
+
+    /// 現在の高さ・望む高さ・直前に要求した高さから、次の動作を決める。
+    /// 高さはいずれもウィンドウのフレーム基準(内容基準ではない)
+    nonisolated static func action(current: CGFloat, target: CGFloat, requested: CGFloat?)
+        -> Action
+    {
+        // 0.5pt 未満の差は見えず、往復の原因にしかならない
+        guard abs(current - target) > 0.5 else {
+            return requested == nil ? .none : .clearRequest
+        }
+        guard target >= minimumHeight else { return .none }
+        // 同じ高さを繰り返し要求するのは、AppKit 側が受け付けていない場合。
+        // 何度も設定し直しても直らないので諦める(無限ループを避ける)。
+        // 一度でも一致すれば上の分岐で記録が消えるので、諦めが恒久化はしない
+        if let requested, abs(requested - target) < 0.5 { return .none }
+        return .apply(target)
+    }
+
+    /// 上端を固定して下方向に伸縮させたフレーム。
+    /// メニューバーの下に貼り付いた位置を動かさないため。
+    /// 画面からはみ出すとパネルはスクロールできないので下端に手が届かなくなる。
+    /// 収まらないなら可視領域までに留める(Issue #68 と同じ制約)
+    nonisolated static func frame(current: NSRect, height: CGFloat, within visible: NSRect)
+        -> NSRect
+    {
+        let limited = min(height, visible.height)
+        var frame = NSRect(
+            x: current.minX, y: current.maxY - limited, width: current.width, height: limited)
+        if frame.minY < visible.minY { frame.origin.y = visible.minY }
+        if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - limited }
+        return frame
+    }
+
+    final class Coordinator {
+        /// 直前に要求した高さ(ウィンドウのフレーム基準)
+        var requested: CGFloat?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // 明らかに使えない測定値は、非同期ホップを積む前に捨てる
+        guard height >= Self.minimumHeight else { return }
+        let contentHeight = height
+        let coordinator = context.coordinator
+        // 更新の途中ではウィンドウの大きさがまだ変わっていないため、
+        // レイアウトが落ち着く次のループで見る
+        DispatchQueue.main.async {
+            guard let window = nsView.window, window.isVisible else { return }
+            // 測っているのは内容の高さ。タイトルバー等がある窓でもずれないよう、
+            // フレーム基準へ変換してから比べる
+            let target = window.frameRect(
+                forContentRect: NSRect(x: 0, y: 0, width: window.frame.width, height: contentHeight)
+            ).height
+            switch Self.action(
+                current: window.frame.height, target: target, requested: coordinator.requested)
+            {
+            case .none:
+                break
+            case .clearRequest:
+                coordinator.requested = nil
+            case .apply(let height):
+                coordinator.requested = height
+                let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+                window.setFrame(
+                    Self.frame(
+                        current: window.frame, height: height,
+                        within: visible ?? window.frame.insetBy(dx: 0, dy: -height)),
+                    display: true)
+            }
+        }
+    }
+}
 
 /// ホストしているウィンドウを透明にし、角丸マスクを適用する。
 ///
