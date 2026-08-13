@@ -31,11 +31,12 @@ struct MenuContentView: View {
     @State private var heightBudget: CGFloat?
 
     /// 根とウィンドウに与える高さ。内容の実測を画面に収まる範囲へ丸める。
-    /// 実測前は nil(制約しない)。下限は測定が壊れたときの歯止め(Issue #41)
+    /// 実測前は nil(制約しない)。
+    /// 下限未満の値は contentHeight / heightBudget に入る前に捨てているので、
+    /// ここで丸め上げはしない(丸め上げると、壊れた測定値を「100pt のパネル」
+    /// という本物の目標に昇格させてしまう)
     private var resolvedHeight: CGFloat? {
-        contentHeight.map { height in
-            max(WindowHeightSync.minimumHeight, min(height, heightBudget ?? .infinity))
-        }
+        contentHeight.map { min($0, heightBudget ?? .infinity) }
     }
 
     var body: some View {
@@ -71,11 +72,13 @@ struct MenuContentView: View {
     }
 
     /// 内容そのもの。実測した高さを contentHeight へ届ける。
-    /// 測るのは器の ScrollView ではなく中身(器を測ると潰れる: Issue #41)
+    /// 測るのは器の ScrollView ではなく中身(器を測ると潰れる: Issue #41)。
+    /// 壊れた測定値(下限未満)は捨てて、直前の正しい値を保つ
     private var sized: some View {
         content
             .frame(width: 280)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                guard height >= WindowHeightSync.minimumHeight else { return }
                 if contentHeight != height { contentHeight = height }
             }
     }
@@ -357,8 +360,9 @@ struct WindowHeightSync: NSViewRepresentable {
                     forName: NSApplication.didChangeScreenParametersNotification,
                     object: nil, queue: .main
                 ) { [weak self] _ in
-                    // queue: .main 指定なのでメインスレッドで呼ばれる
-                    MainActor.assumeIsolated { self?.sync() }
+                    // queue: .main でもコンパイラ上は MainActor と同値ではないため、
+                    // 仮定(assumeIsolated)ではなくホップで渡す
+                    Task { @MainActor in self?.sync() }
                 })
         }
 
@@ -366,12 +370,13 @@ struct WindowHeightSync: NSViewRepresentable {
             guard let window, window.isVisible else { return }
             let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
             if let visible {
-                // パネルに使える内容の高さ。タイトルバー等の分を除いて伝える
+                // パネルに使える内容の高さ。タイトルバー等の分を除いて伝える。
+                // 画面遷移中の壊れた値(下限未満)で根を潰さないよう、伝えない
                 let budget = window.contentRect(
                     forFrameRect: NSRect(
                         x: 0, y: 0, width: window.frame.width, height: visible.height)
                 ).height
-                onBudgetChange?(budget)
+                if budget >= WindowHeightSync.minimumHeight { onBudgetChange?(budget) }
             }
             guard let contentHeight else { return }
             // 測っているのは内容の高さ。タイトルバー等がある窓でもずれないよう、
