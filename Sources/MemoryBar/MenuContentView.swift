@@ -5,6 +5,7 @@ import SwiftUI
 struct MenuContentView: View {
     let monitor: MemoryMonitor
     let updateController: UpdateController
+    let loginItemController: LoginItemController
     let floatingController: FloatingWindowController
     @State private var floatingVisible = false
     @AppStorage(MenuContentView.detailsExpandedKey) private var detailsExpanded = false
@@ -115,6 +116,7 @@ struct MenuContentView: View {
             DisclosureHeader(title: "設定", isExpanded: $settingsExpanded)
             if settingsExpanded {
                 settings
+                loginItem
                 floating
                 if !needsUpdateAttention {
                     Divider()
@@ -152,6 +154,36 @@ struct MenuContentView: View {
                 .font(.callout)
                 .disabled(!floatingVisible)
         }
+    }
+
+    private var loginItem: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("ログイン時に開く", isOn: loginItemBinding)
+                .font(.callout)
+                .toggleStyle(.checkbox)
+            if let message = loginItemController.statusMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(message)
+            }
+            if loginItemController.requiresApproval {
+                Button("ログイン項目の設定を開く") {
+                    loginItemController.openSystemSettings()
+                }
+                .font(.callout)
+            }
+        }
+        // システム設定で切り替えた状態を、パネルを開き直したときに反映する。
+        .onAppear { loginItemController.refresh() }
+    }
+
+    private var loginItemBinding: Binding<Bool> {
+        Binding(
+            get: { loginItemController.isEnabled },
+            set: { loginItemController.setEnabled($0) })
     }
 
     private var updates: some View {
