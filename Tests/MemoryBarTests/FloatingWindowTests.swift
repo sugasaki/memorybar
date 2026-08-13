@@ -37,6 +37,24 @@ final class FloatingWindowTests: XCTestCase {
             UserDefaults.standard.bool(forKey: FloatingWindowController.defaultsKey))
     }
 
+    func test記憶した高さを捨てるのは表示項目を変えた初回だけ() {
+        // 毎回捨てると利用者が決めた大きさを起動のたびに失う
+        let defaults = UserDefaults(suiteName: "MemoryBarTests.layout")!
+        defaults.removePersistentDomain(forName: "MemoryBarTests.layout")
+        defaults.set(300.0, forKey: FloatingWindowController.compactHeightKey)
+        defaults.set(700.0, forKey: FloatingWindowController.expandedHeightKey)
+
+        // 版の記録が無い = 更新でこの版になった直後
+        XCTAssertTrue(FloatingWindowController.consumeLayoutChange(defaults))
+        XCTAssertNil(defaults.object(forKey: FloatingWindowController.compactHeightKey))
+        XCTAssertNil(defaults.object(forKey: FloatingWindowController.expandedHeightKey))
+
+        defaults.set(280.0, forKey: FloatingWindowController.compactHeightKey)
+        XCTAssertFalse(FloatingWindowController.consumeLayoutChange(defaults))
+        XCTAssertEqual(defaults.double(forKey: FloatingWindowController.compactHeightKey), 280)
+        defaults.removePersistentDomain(forName: "MemoryBarTests.layout")
+    }
+
     func test画面外の位置は画面上と判定しない() {
         // 表示構成が変わって保存位置が画面外になると、ウィンドウを見失う。
         // その場合は既定位置へ戻す必要があるため、判定できることを確かめる
@@ -82,7 +100,9 @@ final class FloatingWindowTests: XCTestCase {
     private var screen: NSRect { NSRect(x: 0, y: 0, width: 1600, height: 1000) }
 
     func test展開しても上端が動かない() {
-        let current = NSRect(x: 100, y: 700, width: 300, height: 168)
+        let current = NSRect(
+            x: 100, y: 700, width: 300,
+            height: FloatingWindowController.compactSize.height)
         let result = FloatingWindowController.frame(for: true, current: current, within: screen)
         XCTAssertEqual(result.maxY, current.maxY, accuracy: 0.5, "上端がずれると置いた位置が動いて見える")
         XCTAssertGreaterThan(result.height, current.height)
@@ -98,7 +118,9 @@ final class FloatingWindowTests: XCTestCase {
     func test状態ごとに記憶した高さを復元する() {
         // 展開時に広げた高さは、折りたたんで再度開いたときに戻ってくる。
         // 上端を基準に下へ伸ばすので、画面に収まる位置に置いて確かめる
-        let current = NSRect(x: 100, y: 700, width: 300, height: 168)
+        let current = NSRect(
+            x: 100, y: 700, width: 300,
+            height: FloatingWindowController.compactSize.height)
         let result = FloatingWindowController.frame(
             for: true, current: current, storedHeight: 720, within: screen)
         XCTAssertEqual(result.height, 720)
@@ -113,9 +135,32 @@ final class FloatingWindowTests: XCTestCase {
         XCTAssertEqual(result.height, 300)
     }
 
+    func test記憶を捨てた後は必要量まで広げるが縮めない() {
+        // 表示項目を変えた版では記憶を捨てて呼ぶ。増えた行が隠れないよう
+        // 必要量までは広げ、利用者が広げていた大きさは縮めない(Issue #66)
+        let compact = FloatingWindowController.compactSize.height
+        let small = NSRect(x: 100, y: 700, width: 300, height: compact - 68)
+        XCTAssertEqual(
+            FloatingWindowController.grownFrame(for: false, current: small, within: screen).height,
+            compact, "古い高さのままだと増えた行が隠れる")
+
+        let large = NSRect(x: 100, y: 900, width: 300, height: 420)
+        XCTAssertEqual(
+            FloatingWindowController.grownFrame(for: false, current: large, within: screen).height,
+            420, "広げてあった窓を起動のたびに押し戻さない")
+
+        // 展開中に更新された場合も同じ
+        let shortExpanded = NSRect(x: 100, y: 900, width: 300, height: 500)
+        XCTAssertEqual(
+            FloatingWindowController.grownFrame(for: true, current: shortExpanded, within: screen)
+                .height, FloatingWindowController.expandedHeight)
+    }
+
     func test記憶した高さも画面外にはみ出さない() {
         let small = NSRect(x: 0, y: 0, width: 1600, height: 400)
-        let current = NSRect(x: 100, y: 100, width: 300, height: 168)
+        let current = NSRect(
+            x: 100, y: 100, width: 300,
+            height: FloatingWindowController.compactSize.height)
         let result = FloatingWindowController.frame(
             for: true, current: current, storedHeight: 900, within: small)
         XCTAssertLessThanOrEqual(result.height, small.height)
@@ -130,7 +175,9 @@ final class FloatingWindowTests: XCTestCase {
 
     func test画面外にはみ出さない() {
         // 下端付近で展開すると画面外へ伸びてしまい、掴めなくなる
-        let current = NSRect(x: 100, y: 10, width: 300, height: 168)
+        let current = NSRect(
+            x: 100, y: 10, width: 300,
+            height: FloatingWindowController.compactSize.height)
         let result = FloatingWindowController.frame(for: true, current: current, within: screen)
         XCTAssertGreaterThanOrEqual(result.minY, screen.minY)
         XCTAssertLessThanOrEqual(result.maxY, screen.maxY)
@@ -138,7 +185,9 @@ final class FloatingWindowTests: XCTestCase {
 
     func test画面より高い要求でも可視領域に収まる() {
         let small = NSRect(x: 0, y: 0, width: 1600, height: 300)
-        let current = NSRect(x: 100, y: 100, width: 300, height: 168)
+        let current = NSRect(
+            x: 100, y: 100, width: 300,
+            height: FloatingWindowController.compactSize.height)
         let result = FloatingWindowController.frame(for: true, current: current, within: small)
         XCTAssertLessThanOrEqual(result.height, small.height)
         XCTAssertGreaterThanOrEqual(result.minY, small.minY)
@@ -146,7 +195,9 @@ final class FloatingWindowTests: XCTestCase {
     }
 
     func test開閉を繰り返しても位置と大きさが往復する() {
-        let start = NSRect(x: 100, y: 500, width: 300, height: 168)
+        let start = NSRect(
+            x: 100, y: 500, width: 300,
+            height: FloatingWindowController.compactSize.height)
         var frame = start
         for _ in 0..<3 {
             frame = FloatingWindowController.frame(for: true, current: frame, within: screen)

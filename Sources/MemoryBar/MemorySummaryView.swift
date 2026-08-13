@@ -31,6 +31,27 @@ struct MemorySummaryView<Accessory: View>: View {
         DisplayMode(rawValue: displayModeRaw) ?? .default
     }
 
+    private var capacityRows: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            row(MemoryLabel.total, MemoryFormat.detail(snapshot.total))
+            row(MemoryLabel.used, MemoryFormat.detail(snapshot.used))
+            row(MemoryLabel.available, MemoryFormat.detail(snapshot.available))
+        }
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(value)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+        .font(.callout)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -56,12 +77,11 @@ struct MemorySummaryView<Accessory: View>: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Text(displayMode.secondaryText(for: snapshot))
-                    .font(.title3.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
             }
             CompositionBar(snapshot: snapshot)
+            // 総量・使用量・利用可能を、選んだモードによらず同じ位置に出す。
+            // 位置が固定なら、どのモードでも同じ場所を見れば全体が分かる(Issue #66)
+            capacityRows
         }
     }
 }
@@ -72,14 +92,6 @@ struct MemoryDetailsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // アクティビティモニタとの突き合わせに使う2値。内訳だけだと照合できない
-            HStack {
-                Text("使用済みメモリ")
-                Spacer(minLength: 8)
-                Text(MemoryFormat.detail(snapshot.used))
-                    .monospacedDigit()
-            }
-            .font(.callout.weight(.semibold))
             ForEach(MemoryComposition.segments(of: snapshot)) { segment in
                 HStack(spacing: 6) {
                     RoundedRectangle(cornerRadius: 2)
@@ -103,11 +115,13 @@ struct MemoryDetailsView: View {
                     .monospacedDigit()
             }
             .font(.callout)
+            // 要約から外した使用率はここに置く。帯があるので一目の逼迫度は足りているが、
+            // 数値で知りたい場面のために残す(Issue #66)
             HStack {
-                Text("物理メモリ")
+                Text(MemoryLabel.usedRatio)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Text(MemoryFormat.detail(snapshot.total))
+                Text(DisplayMode.percentText(snapshot))
                     .monospacedDigit()
             }
             .font(.callout)

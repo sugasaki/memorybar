@@ -77,12 +77,18 @@ final class FloatingWindowController {
     /// 状態ごとの高さ。開閉を往復しても利用者が決めた大きさを失わないため
     nonisolated static let compactHeightKey = "floatingCompactHeight"
     nonisolated static let expandedHeightKey = "floatingExpandedHeight"
-    /// 要約のみの既定サイズ。既定はコンパクトに保つ
-    nonisolated static let compactSize = NSSize(width: 300, height: 168)
+    /// 表示項目を増減したら上げる。上げた版で一度だけ記憶した高さを捨てる
+    nonisolated static let layoutVersion = 2
+    nonisolated static let layoutVersionKey = "floatingLayoutVersion"
+    /// 要約のみの既定サイズ。既定はコンパクトに保つ。
+    /// 総量・使用量・利用可能の3行を含めた実測値(Issue #66)
+    nonisolated static let compactSize = NSSize(width: 300, height: 236)
     /// 詳細を開いたときの高さ(内訳7行 + アプリ一覧6行が収まる)
-    nonisolated static let expandedHeight: CGFloat = 560
+    nonisolated static let expandedHeight: CGFloat = 620
     nonisolated static var defaultSize: NSSize { compactSize }
-    /// これ以上小さくすると要約すら読めなくなる
+    /// これ以上小さくすると要約すら読めなくなる。
+    /// 行を増やしても据え置く。この窓はスクロールできるので、
+    /// 小さくしたい利用者から選択肢を奪わない(幅220での崩れは実機で確認済み)
     nonisolated static let minimumSize = NSSize(width: 220, height: 130)
 
     private var panel: NSPanel?
@@ -144,7 +150,10 @@ final class FloatingWindowController {
         // .accessory なアプリでもクリックでアプリを前面化させない
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
-        panel.contentView = NSHostingView(
+        // NSHostingView をそのまま contentView にすると、Auto Layout で
+        // ウィンドウの大きさが内容に支配される。根が GeometryReader で固有サイズを
+        // 持たないため最小値に張り付くので、器に載せて追従だけさせる(Issue #66)
+        let hosting = NSHostingView(
             rootView: FloatingContentView(
                 monitor: monitor,
                 onClose: { [weak self] in
@@ -154,6 +163,13 @@ final class FloatingWindowController {
                 onDetailsToggled: { [weak self] expanded in
                     self?.resizeForDetails(expanded: expanded)
                 }))
+        let container = NSView(frame: NSRect(origin: .zero, size: Self.defaultSize))
+        hosting.translatesAutoresizingMaskIntoConstraints = true
+        hosting.frame = container.bounds
+        hosting.autoresizingMask = [.width, .height]
+        container.addSubview(hosting)
+        panel.contentView = container
+        panel.setContentSize(Self.defaultSize)
 
         // 位置とサイズを記憶する
         panel.setFrameAutosaveName(Self.frameAutosaveName)
@@ -161,14 +177,13 @@ final class FloatingWindowController {
         if panel.frame.origin == .zero || !Self.isOnAnyScreen(panel.frame) {
             Self.moveToDefaultPosition(panel)
         }
-        // 詳細を開いた状態で起動したとき、記憶した高さが足りないと中身が収まらない。
-        // 折りたたみ状態では記憶した高さをそのまま使う(利用者の選択を壊さない)
-        if UserDefaults.standard.bool(forKey: Self.detailsExpandedKey) {
+        // 表示項目を変えた版の初回だけ、記憶を捨てて必要量まで広げる。
+        // 縮めはしないので、利用者が広げていた大きさは残る
+        let expanded = UserDefaults.standard.bool(forKey: Self.detailsExpandedKey)
+        if Self.consumeLayoutChange() {
             let visible = Self.visibleFrame(containing: panel.frame)
             panel.setFrame(
-                Self.frame(
-                    for: true, current: panel.frame,
-                    storedHeight: Self.storedHeight(expanded: true), within: visible),
+                Self.grownFrame(for: expanded, current: panel.frame, within: visible),
                 display: false)
         }
         panel.orderFrontRegardless()
@@ -188,6 +203,20 @@ final class FloatingWindowController {
         // animate: true は表示中のウィンドウで約0.35秒メインスレッドを止め、
         // その間 1秒更新もメニューバーの文字列も停止するため使わない
         panel.setFrame(target, display: true)
+    }
+
+    /// 表示項目を変えた版で最初に呼ばれたときだけ true を返し、記憶した高さを捨てる。
+    ///
+    /// 更新で行が増えても記憶した高さはそのままなので、以前の高さで復元すると
+    /// 増えた行が隠れる。かといって毎回必要量まで広げると、利用者が意図して
+    /// 小さくした窓を起動のたびに押し戻してしまう。変えた回だけに限る
+    @discardableResult
+    nonisolated static func consumeLayoutChange(_ defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.integer(forKey: layoutVersionKey) != layoutVersion else { return false }
+        defaults.set(layoutVersion, forKey: layoutVersionKey)
+        defaults.removeObject(forKey: compactHeightKey)
+        defaults.removeObject(forKey: expandedHeightKey)
+        return true
     }
 
     /// 状態ごとに記憶した高さ。無ければ nil
@@ -214,8 +243,7 @@ final class FloatingWindowController {
     ) -> NSRect {
         let fallback = expanded ? expandedHeight : compactSize.height
         // 記憶が無い場合も、展開なら現在より縮めない(中身が収まらなくなるため)
-        let desired =
-            storedHeight ?? (expanded ? max(current.height, fallback) : fallback)
+        let desired = storedHeight ?? (expanded ? max(current.height, fallback) : fallback)
         var frame = current
         let top = current.maxY
         frame.size.height = min(desired, max(minimumSize.height, visible.height))
@@ -223,6 +251,17 @@ final class FloatingWindowController {
         if frame.minY < visible.minY { frame.origin.y = visible.minY }
         if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.size.height }
         return frame
+    }
+
+    /// 表示項目を変えた版の初回に使うフレーム。
+    /// 増えた行が隠れないよう必要量までは広げるが、利用者が広げていた窓は縮めない
+    nonisolated static func grownFrame(for expanded: Bool, current: NSRect, within visible: NSRect)
+        -> NSRect
+    {
+        let required = expanded ? expandedHeight : compactSize.height
+        return frame(
+            for: expanded, current: current, storedHeight: max(current.height, required),
+            within: visible)
     }
 
     /// ウィンドウが最も重なっている画面の可視領域
