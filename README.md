@@ -132,6 +132,16 @@ Local builds display the newest existing tag, so they never claim a number that 
 
 At 16px the elements collapse into each other, so that size is drawn separately: no pin, and the bars reduced to three colors.
 
+### Social preview
+
+`scripts/ogp/make-ogp.swift` composes `docs/ogp.png` (1280×640) from the icon and the real screenshots under `docs/screenshots/` — the card that X, Facebook and Slack show when the repository is shared.
+
+```sh
+swift scripts/ogp/make-ogp.swift          # regenerate docs/ogp.png
+```
+
+GitHub offers no API for the social preview, so after regenerating it has to be uploaded by hand under Settings > General > Social preview. Keep it at or under 1MB; the script warns if it goes over.
+
 ## Commands for verification
 
 Launch the executable inside the `.app` directly (`swift run` does not produce an `.app`, so update detection cannot be exercised that way).

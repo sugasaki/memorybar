@@ -128,6 +128,16 @@ cp -R dist/MemoryBar.app /Applications/
 
 16pxでは要素が潰れるため、ピンを省き帯を3色に絞った専用の描き分けをしている。
 
+### ソーシャルプレビュー(OGP)
+
+`scripts/ogp/make-ogp.swift` が、アイコンと `docs/screenshots/` の実機キャプチャから `docs/ogp.png`(1280×640)を合成する。X・Facebook・Slack などでリポジトリを共有したときに出るカード。
+
+```sh
+swift scripts/ogp/make-ogp.swift          # docs/ogp.png を作り直す
+```
+
+GitHub はソーシャルプレビューのAPIを公開していないため、作り直したあとは「Settings > General > Social preview」から手で上げる。1MBを超えると受け付けられないので、超えた場合はスクリプトが警告する。
+
 ## 検証用コマンド
 
 `.app` 内の実行ファイルを直接起動する(`swift run` では `.app` でないため更新判定まで確認できない)。
