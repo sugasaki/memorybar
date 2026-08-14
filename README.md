@@ -1,135 +1,176 @@
-<img src="docs/icon.png" width="128" align="right" alt="MemoryBar のアイコン">
+<img src="docs/icon.png" width="128" align="right" alt="MemoryBar icon">
 
 # MemoryBar
 
-macOSのメニューバーに常駐し、メモリの残容量・使用量をアクティビティモニタと同じ計算式でリアルタイム表示するアプリ。
+**English** | [日本語](README.ja.md)
 
-- メニューバーに常時表示(約1秒間隔で更新)。表示する値は **残容量GB / 使用量GB / 使用率%** から選べ、パネルの大きな数値も同じ値になる
-- 既定はコンパクト表示。「詳細」を開くと内訳と使用量の多いアプリが出る
-- **フローティングウィンドウ**で常時表示できる(リサイズ可能・全スペースに追従・×で閉じる)
-- 使用量の多いアプリを表示(何を終了すれば楽になるかが分かる)
-- 更新を自動で確認して適用する
-- Swift + SwiftUI製、外部依存なし。実測でCPU約1%、常駐時のメモリ約70MB
+A macOS menu bar app that shows how much memory is available and how much is in use, in real time, computed with the same formula as Activity Monitor.
 
-メニューパネルとフローティングウィンドウは同じ見た目で、開閉状態だけ別々に持つ。
+[![Download](https://img.shields.io/github/v/release/sugasaki/memorybar?label=download&style=flat-square)](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square)](#build)
+[![Swift 6](https://img.shields.io/badge/Swift-6-orange?style=flat-square)](Package.swift)
+[![MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-## インストール
+- Always visible in the menu bar, refreshed about once a second. Pick what it shows — **Available GB / Used GB / Used %** — and the large number in the panel shows the same value
+- Compact by default. Open 詳細 (details) for the breakdown and the apps using the most memory
+- A **floating window** for permanent on-screen display (resizable, follows you across Spaces, closes with ×)
+- Shows which apps are using the most memory, so you know what to quit
+- Checks for updates and applies them on its own
+- Swift + SwiftUI, no external dependencies. Measured at about 1% CPU and about 70MB resident
 
-**[MemoryBar.zip](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)** をダウンロードし、展開して `MemoryBar.app` を `/Applications` に置く。
+The menu panel and the floating window look identical; only their open/closed state is tracked separately.
 
-- Apple SiliconとIntelの両方で動くUniversalビルド。`main`への変更ごとにGitHub Actionsが自動で更新する
-- 初回起動時にログイン項目へ自動登録される。設定の「ログイン時に開く」でON/OFFを切り替えられる
+> **Note:** the app's own interface is currently Japanese only. This README is available in English and Japanese.
 
-### 初回起動時の許可(1回だけ)
+## Screenshots
 
-ad-hoc署名のため、**ブラウザでダウンロードした場合のみ**macOSが初回起動をブロックする。次のいずれかで許可する。
+<img src="docs/screenshots/menubar.png" width="420" alt="A strip of the macOS menu bar; MemoryBar shows 2.5G next to a memory-chip icon">
 
-- `MemoryBar.app` を右クリック →「開く」→ ダイアログで「開く」
-- 「システム設定 > プライバシーとセキュリティ」の「このまま開く」
+*In the menu bar — the memory-chip icon and `2.5G`. The value follows the display mode you pick.*
+
+| Compact | Details expanded |
+| --- | --- |
+| <img src="docs/screenshots/floating.png" width="300" alt="MemoryBar showing 2.56 GB available, a colored composition bar, and rows for installed, used and available memory"> | <img src="docs/screenshots/floating-details.png" width="300" alt="MemoryBar with details expanded, showing the memory breakdown, swap used, usage ratio and the apps using the most memory"> |
+| The value you chose, the composition bar, and installed / used / available. The dot at the top right is memory pressure. | The breakdown behind the bar, swap, usage ratio, and the apps using the most memory. |
+
+Shown here as the floating window, which is why it has a close button. The menu bar panel renders the same view and adds a 設定 (settings) section and a 終了 (quit) button below it.
+
+## Install
+
+Download **[MemoryBar.zip](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)**, unzip it, and put `MemoryBar.app` in `/Applications`.
+
+- Universal build — runs on both Apple Silicon and Intel. GitHub Actions rebuilds it on every change to `main`
+
+MemoryBar **registers itself to open at login on its first launch** — there is nothing to set up. The panel's ログイン時に開く (open at login) checkbox turns it off, and once you have set it yourself the app never re-registers it behind your back. If macOS wants approval before it will actually launch, the panel says so and offers a ログイン項目の設定を開く (open Login Items settings) button.
+
+### First launch (once)
+
+The build is ad-hoc signed, so macOS blocks the first launch — **but only if you downloaded it with a browser**. Allow it in any of these ways:
+
+- Right-click `MemoryBar.app` → Open → Open in the dialog
+- System Settings > Privacy & Security → Open Anyway
 - `xattr -dr com.apple.quarantine /Applications/MemoryBar.app`
 
-2回目以降は不要。アプリ内の更新では差し替え時に検疫属性を取り除くため、警告は出ない。
+Later launches need nothing. In-app updates strip the quarantine attribute as they replace the bundle, so no warning appears.
 
-## 自動アップデート
+## Automatic updates
 
-起動時と、以降6時間おきに最新リリースを確認する。既定では**更新が見つかると自動でインストールして再起動**する。差し替えに失敗した場合は元のバージョンへ戻して再起動する。
+MemoryBar checks for the latest release at launch and every six hours after that. By default it **installs any update it finds and restarts**. If replacing the bundle fails, it restores the previous version and restarts that.
 
-- 「更新を自動でインストール」をオフにすると、更新があってもパネルに表示するだけになり、「インストールして再起動」を押したときにだけ適用する
-- 「定期的に自動で確認」をオフにすると自動確認そのものを止められる
-- パネルの「更新を確認」でいつでも手動確認できる
-- ログは `~/Library/Logs/MemoryBar-update.log`
+The panel's controls are labelled in Japanese, so they are given here as they appear:
 
-**認証は不要**で、アプリはトークンを一切持たない。公開リポジトリのリリースを素のHTTPSで取得する。追加のインストールも設定もいらない。
+- Turn off 更新を自動でインストール (install updates automatically) and an available update is only shown in the panel; it is applied when you press インストールして再起動 (install and restart)
+- Turn off 定期的に自動で確認 (check periodically) to stop automatic checks altogether
+- 更新を確認 (check for updates) runs a check at any time
+- Log: `~/Library/Logs/MemoryBar-update.log`
 
-## 表示している値
+**No authentication is involved** and the app holds no token. It fetches releases from the public repository over plain HTTPS. Nothing else to install or configure.
+
+## What the numbers mean
 
 ```
-未使用   = free_count − speculative
-残容量   = 未使用 + キャッシュされたファイル(external + purgeable)
-使用済み = 物理メモリ(hw.memsize) − 残容量
+Unused    = free_count − speculative
+Available = Unused + cached files (external + purgeable)
+Used      = physical memory (hw.memsize) − Available
 
-アプリメモリ = internal − purgeable   確保済み = wired   圧縮 = compressor
-その他       = 使用済み − (アプリメモリ + 確保済み + 圧縮)
+App Memory = internal − purgeable   Wired = wired   Compressed = compressor
+Other      = Used − (App Memory + Wired + Compressed)
 ```
 
-解放できる領域を残容量として先に定め、使用済みをそこから導出する。こうすると両者の合計が必ず物理メモリに一致する。データソースはアクティビティモニタと同じ Mach API `host_statistics64`。
+Available — the memory that can be reclaimed — is established first, and Used is derived from it. That way the two always add up to exactly the physical memory installed. The data source is the same Mach API Activity Monitor uses, `host_statistics64`.
 
-読むうえで押さえておく点が3つある。
+Three things are worth knowing when reading these numbers.
 
-**「その他」があるのは、アクティビティモニタの「使用済みメモリ」が3内訳(アプリ+確保済み+圧縮)の合計ではないため。** 実測で約0.73GB大きく、その差はメモリ状態が動く間もほぼ一定。VMがどの内訳にも計上していないページ(カーネル/ファームウェア予約領域など)にあたる。これを表示することで、画面上で内訳の合計と使用済みが一致する。
+**"Other" exists because Activity Monitor's Memory Used is not the sum of its three parts (App + Wired + Compressed).** Measured, it is about 0.73GB larger, and that gap stays nearly constant as memory activity changes. It corresponds to pages the VM does not attribute to any category — kernel and firmware reserved regions, for instance. Showing it makes the breakdown add up to Used on screen.
 
-**残容量はファイルキャッシュを含むため「いますぐ確実に使える量」の上限にあたる。** キャッシュは必要に応じて解放されるが、書き戻し前のページは即座には解放できない。実際の逼迫度はメモリプレッシャーとスワップ使用量を併せて見る。
+**Available includes the file cache, so it is an upper bound on "what you can definitely use right now."** The cache is released on demand, but pages not yet written back cannot be freed immediately. For actual pressure, read memory pressure and swap usage alongside it.
 
-**アクティビティモニタとの差は0.15GB程度残る。** 使用済みメモリは1秒で最大0.16GB動くため、採取時刻の差がそのまま出る。アクティビティモニタ側も「使用済み+キャッシュ>物理メモリ」となる瞬間があり、その表示が単一時点のものではないため、これ以上の一致は原理的に難しい。内訳(アプリ/確保済み/圧縮/キャッシュ/スワップ)は完全に一致する。
+**A gap of about 0.15GB from Activity Monitor remains.** Memory Used moves by up to 0.16GB per second, so any difference in sampling time shows up directly. Activity Monitor itself has moments where used + cached exceeds physical memory, which means its display is not a single point in time either — closer agreement is not achievable in principle. The breakdown (App / Wired / Compressed / Cached Files / Swap) matches exactly.
 
-計算式の検証記録は [Issue #24](https://github.com/sugasaki/memorybar/issues/24) を参照。
+The record of how the formula was verified is in [Issue #24](https://github.com/sugasaki/memorybar/issues/24) (Japanese).
 
-### 使用量の多いアプリ
+### Apps using the most memory
 
-各アプリの値は、そのアプリに属するプロセスの `phys_footprint` の合計。これは**アクティビティモニタの「メモリ」列と同じ指標**で、同時刻の比較で一致することを確認している。
+Each app's number is the sum of `phys_footprint` across the processes belonging to it. This is **the same metric as Activity Monitor's Memory column**, confirmed to match when compared at the same instant.
 
-ヘルパープロセスは親アプリにまとめるため、Chromeのように多数の子プロセスを持つアプリも1行で見られる。所有者の違うプロセス(端末が挟む `login` など)を経由していても辿れるようにしてあり、メニューバー常駐アプリ配下のプロセスも名前で表示される。
+Helper processes are rolled up into their parent app, so an app with many child processes — Chrome, say — shows as a single row. The lookup walks through processes owned by other users too (the `login` a terminal inserts, for example), and processes under menu bar apps are named correctly.
 
-**合計が物理メモリを超えることがある。** `phys_footprint` は圧縮済み・スワップ済みの分を含むためで、二重計上ではない。
+**The total can exceed physical memory.** `phys_footprint` includes compressed and swapped-out pages; this is not double counting.
 
-他ユーザー所有のプロセスは権限の都合で取得できないため含まれない。取得できた分のうち上位に入らなかったものは「その他のプロセス」としてまとめ、黙って落とさないようにしている。
+Processes owned by other users cannot be read for permission reasons and are not included. Whatever was readable but did not make the top of the list is grouped as "other processes" rather than being silently dropped.
 
-## ビルド
+## Build
 
-要件: macOS 14以降、Xcode(またはSwift 6 toolchain)
+Requires macOS 14 or later and Xcode (or a Swift 6 toolchain).
 
 ```sh
 swift build
 swift test
-swift run              # そのまま実行(メニューバーに常駐)
+swift run              # run directly (lives in the menu bar)
 ```
 
-`.app` として使う場合:
+To use it as an `.app`:
 
 ```sh
-scripts/make-app.sh                                   # 自アーキテクチャのみ(高速)
-UNIVERSAL=1 scripts/make-app.sh                       # arm64 + x86_64(配布用)
-APP_VERSION=0.9.9 APP_BUILD=42 scripts/make-app.sh    # バージョンを明示指定
+scripts/make-app.sh                                   # host architecture only (fast)
+UNIVERSAL=1 scripts/make-app.sh                       # arm64 + x86_64 (for distribution)
+APP_VERSION=0.9.9 APP_BUILD=42 scripts/make-app.sh    # pin the version explicitly
 cp -R dist/MemoryBar.app /Applications/
 ```
 
-生成物はad-hoc署名。第三者へ配布する場合はDeveloper ID Application証明書での署名とnotarizationが別途必要。
+The result is ad-hoc signed. Distributing to third parties additionally requires signing with a Developer ID Application certificate and notarization.
 
-### バージョン
+### Versioning
 
-**Git タグ(`vX.Y.Z`)が唯一の出所**。`main` へマージするたびにCIがパッチ番号を進めてタグを打つため、手で管理する必要はない。メジャー・マイナーを上げたいときは、Releaseワークフローを手動実行してバージョンを指定する。
+**Git tags (`vX.Y.Z`) are the single source of truth.** CI bumps the patch number and tags on every merge to `main`, so there is nothing to maintain by hand. To raise the major or minor version, run the Release workflow manually and give it a version.
 
-手元ビルドでは「いま出ている最新のタグ」を表示する(次の番号を騙らない)。未コミットの変更を含むビルドは `MBSourceCommit` に `-dirty` が付き、更新判定から外れる。
+Local builds display the newest existing tag, so they never claim a number that has not been released. A build containing uncommitted changes gets `-dirty` appended to `MBSourceCommit`, which also excludes it from update checks.
 
-### アイコン
+### Icon
 
-`scripts/icon/make-icon.swift` が全サイズを生成する。**生成物ではなく生成コードを置いている**ので、色や形はコードを直して作り直せる。`scripts/make-app.sh` がビルドのたびに呼び出すため、手作業は要らない。
+`scripts/icon/make-icon.swift` generates every size. **The generator is committed, not its output**, so colors and shapes can be changed by editing the code and rebuilding. `scripts/make-app.sh` calls it on every build — no manual step.
 
-16pxでは要素が潰れるため、ピンを省き帯を3色に絞った専用の描き分けをしている。
+At 16px the elements collapse into each other, so that size is drawn separately: no pin, and the bars reduced to three colors.
 
-## 検証用コマンド
+### Social preview
 
-`.app` 内の実行ファイルを直接起動する(`swift run` では `.app` でないため更新判定まで確認できない)。
+`scripts/ogp/make-ogp.swift` composes `docs/ogp.png` (1280×640) from the icon and the real screenshots under `docs/screenshots/` — the card that X, Facebook and Slack show when the repository is shared.
 
 ```sh
-dist/MemoryBar.app/Contents/MacOS/memorybar --print           # 1回分のサンプルを出力
-dist/MemoryBar.app/Contents/MacOS/memorybar --apps            # 使用量の多いアプリを出力
-dist/MemoryBar.app/Contents/MacOS/memorybar --check-update    # 更新確認のみ
-/Applications/MemoryBar.app/Contents/MacOS/memorybar --install-update   # 実際に適用
+swift scripts/ogp/make-ogp.swift          # regenerate docs/ogp.png
 ```
 
-`--install-update` は常駐中に実行すると動作中のバンドルを置き換えてしまうため、**MemoryBarが起動中は拒否される**。先に終了しておく。
+GitHub offers no API for the social preview, so after regenerating it has to be uploaded by hand under Settings > General > Social preview. Keep it at or under 1MB; the script warns if it goes over.
 
-## 名前について
+## Commands for verification
 
-旧称は TrueMem。「正確な値を出す」という開発上の主張が名前になっており、使う人の視点ではなかったため MemoryBar に改めた(2026-08、[Issue #61](https://github.com/sugasaki/memorybar/issues/61))。
+Launch the executable inside the `.app` directly (`swift run` does not produce an `.app`, so update detection cannot be exercised that way).
 
-Spotlight は前方一致が強いため、先頭が `Memory` だと「Memory」と打った時点で候補に出る。表記は空白なしに統一している(パスやURLに空白が入るのを避けるため)。
+```sh
+dist/MemoryBar.app/Contents/MacOS/memorybar --print           # print one sample
+dist/MemoryBar.app/Contents/MacOS/memorybar --apps            # print the top memory consumers
+dist/MemoryBar.app/Contents/MacOS/memorybar --check-update    # check for updates only
+/Applications/MemoryBar.app/Contents/MacOS/memorybar --install-update   # actually apply
+```
 
-## 開発
+Running `--install-update` while the app is resident would replace the bundle it is running from, so **it is refused while MemoryBar is running**. Quit it first.
 
-- 開発規約と実装上の注意: [AGENTS.md](AGENTS.md)([agent-project-template](https://github.com/sugasaki/agent-project-template)ベース)
-- 設計判断の記録: [Wiki](https://github.com/sugasaki/memorybar/wiki) — コードを読んでも分からない「なぜそうしたか / なぜそうしなかったか」
-  - [パネルの高さ問題](https://github.com/sugasaki/memorybar/wiki/%E3%83%91%E3%83%8D%E3%83%AB%E3%81%AE%E9%AB%98%E3%81%95%E5%95%8F%E9%A1%8C) — メニューパネルの高さを触る前に必ず読む(5回壊した)
-  - [配布と自動アップデートの変遷](https://github.com/sugasaki/memorybar/wiki/%E9%85%8D%E5%B8%83%E3%81%A8%E8%87%AA%E5%8B%95%E3%82%A2%E3%83%83%E3%83%97%E3%83%87%E3%83%BC%E3%83%88%E3%81%AE%E5%A4%89%E9%81%B7) — private + `gh` から public + 未認証 HTTPS へ切り替えた判断
-  - [メモリ解放機能を実装しない判断](https://github.com/sugasaki/memorybar/wiki/%E3%83%A1%E3%83%A2%E3%83%AA%E8%A7%A3%E6%94%BE%E6%A9%9F%E8%83%BD%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%97%E3%81%AA%E3%81%84%E5%88%A4%E6%96%AD) / [UI実装でつまずいた点](https://github.com/sugasaki/memorybar/wiki/UI%E5%AE%9F%E8%A3%85%E3%81%A7%E3%81%A4%E3%81%BE%E3%81%9A%E3%81%84%E3%81%9F%E7%82%B9)
+## About the name
+
+It used to be called TrueMem. That name stated a development claim — "it produces accurate values" — rather than anything from the user's point of view, so it became MemoryBar (2026-08, [Issue #61](https://github.com/sugasaki/memorybar/issues/61)).
+
+Spotlight weights prefix matches heavily, so starting with `Memory` means typing "Memory" already surfaces it. The name is written without a space everywhere, to keep spaces out of paths and URLs.
+
+## Development
+
+Project documentation is written in Japanese.
+
+- Conventions and implementation notes: [AGENTS.md](AGENTS.md) (based on [agent-project-template](https://github.com/sugasaki/agent-project-template))
+- Design decisions: [Wiki](https://github.com/sugasaki/memorybar/wiki) — the "why this and not that" you cannot get from reading the code
+  - [The panel height problem](https://github.com/sugasaki/memorybar/wiki/%E3%83%91%E3%83%8D%E3%83%AB%E3%81%AE%E9%AB%98%E3%81%95%E5%95%8F%E9%A1%8C) — required reading before touching the menu panel's height (broken five times)
+  - [How distribution and auto-update evolved](https://github.com/sugasaki/memorybar/wiki/%E9%85%8D%E5%B8%83%E3%81%A8%E8%87%AA%E5%8B%95%E3%82%A2%E3%83%83%E3%83%97%E3%83%87%E3%83%BC%E3%83%88%E3%81%AE%E5%A4%89%E9%81%B7) — why it moved from private + `gh` to public + unauthenticated HTTPS
+  - [Why there is no "free memory" button](https://github.com/sugasaki/memorybar/wiki/%E3%83%A1%E3%83%A2%E3%83%AA%E8%A7%A3%E6%94%BE%E6%A9%9F%E8%83%BD%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%97%E3%81%AA%E3%81%84%E5%88%A4%E6%96%AD) / [UI implementation pitfalls](https://github.com/sugasaki/memorybar/wiki/UI%E5%AE%9F%E8%A3%85%E3%81%A7%E3%81%A4%E3%81%BE%E3%81%9A%E3%81%84%E3%81%9F%E7%82%B9)
+
+## License
+
+[MIT](LICENSE)
