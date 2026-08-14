@@ -4,7 +4,7 @@
 
 **English** | [日本語](README.ja.md)
 
-A macOS menu bar app that shows how much memory is free and how much is in use, in real time, computed with the same formula as Activity Monitor.
+A macOS menu bar app that shows how much memory is available and how much is in use, in real time, computed with the same formula as Activity Monitor.
 
 [![Download](https://img.shields.io/github/v/release/sugasaki/memorybar?label=download&style=flat-square)](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square)](#build)
@@ -12,7 +12,7 @@ A macOS menu bar app that shows how much memory is free and how much is in use, 
 [![MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
 - Always visible in the menu bar, refreshed about once a second. Pick what it shows — **Available GB / Used GB / Used %** — and the large number in the panel shows the same value
-- Compact by default. Open the details section for the breakdown and the apps using the most memory
+- Compact by default. Open 詳細 (details) for the breakdown and the apps using the most memory
 - A **floating window** for permanent on-screen display (resizable, follows you across Spaces, closes with ×)
 - Shows which apps are using the most memory, so you know what to quit
 - Checks for updates and applies them on its own
@@ -33,14 +33,15 @@ The menu panel and the floating window look identical; only their open/closed st
 | <img src="docs/screenshots/floating.png" width="300" alt="MemoryBar showing 2.56 GB available, a colored composition bar, and rows for installed, used and available memory"> | <img src="docs/screenshots/floating-details.png" width="300" alt="MemoryBar with details expanded, showing the memory breakdown, swap used, usage ratio and the apps using the most memory"> |
 | The value you chose, the composition bar, and installed / used / available. The dot at the top right is memory pressure. | The breakdown behind the bar, swap, usage ratio, and the apps using the most memory. |
 
-Shown here as the floating window, which is why it has a close button. The menu bar panel renders the same view and adds a settings section and a quit button below it.
+Shown here as the floating window, which is why it has a close button. The menu bar panel renders the same view and adds a 設定 (settings) section and a 終了 (quit) button below it.
 
 ## Install
 
 Download **[MemoryBar.zip](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)**, unzip it, and put `MemoryBar.app` in `/Applications`.
 
 - Universal build — runs on both Apple Silicon and Intel. GitHub Actions rebuilds it on every change to `main`
-- To launch it at login, add it under System Settings > General > Login Items
+
+MemoryBar **registers itself to open at login on its first launch** — there is nothing to set up. The panel's ログイン時に開く (open at login) checkbox turns it off, and once you have set it yourself the app never re-registers it behind your back. If macOS wants approval before it will actually launch, the panel says so and offers a ログイン項目の設定を開く (open Login Items settings) button.
 
 ### First launch (once)
 
@@ -56,9 +57,11 @@ Later launches need nothing. In-app updates strip the quarantine attribute as th
 
 MemoryBar checks for the latest release at launch and every six hours after that. By default it **installs any update it finds and restarts**. If replacing the bundle fails, it restores the previous version and restarts that.
 
-- Turn off "install updates automatically" and an available update is only shown in the panel; it is applied when you press the install-and-restart button
-- Turn off "check periodically" to stop automatic checks altogether
-- The check button in the panel runs a check at any time
+The panel's controls are labelled in Japanese, so they are given here as they appear:
+
+- Turn off 更新を自動でインストール (install updates automatically) and an available update is only shown in the panel; it is applied when you press インストールして再起動 (install and restart)
+- Turn off 定期的に自動で確認 (check periodically) to stop automatic checks altogether
+- 更新を確認 (check for updates) runs a check at any time
 - Log: `~/Library/Logs/MemoryBar-update.log`
 
 **No authentication is involved** and the app holds no token. It fetches releases from the public repository over plain HTTPS. Nothing else to install or configure.

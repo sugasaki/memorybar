@@ -38,7 +38,8 @@ macOSのメニューバーに常駐し、メモリの残容量・使用量をア
 **[MemoryBar.zip](https://github.com/sugasaki/memorybar/releases/latest/download/MemoryBar.zip)** をダウンロードし、展開して `MemoryBar.app` を `/Applications` に置く。
 
 - Apple SiliconとIntelの両方で動くUniversalビルド。`main`への変更ごとにGitHub Actionsが自動で更新する
-- ログイン時に自動起動するには「システム設定 > 一般 > ログイン項目」に追加する
+
+**初回起動時に自分でログイン項目へ登録する**ため、設定は要らない。パネルの「ログイン時に開く」で解除でき、一度自分で切り替えたあとは勝手に登録し直さない。macOS側の許可が必要な状態ならパネルにその旨が出て、「ログイン項目の設定を開く」から移動できる。
 
 ### 初回起動時の許可(1回だけ)
 
