@@ -24,15 +24,16 @@ The menu panel and the floating window look identical; only their open/closed st
 
 ## Screenshots
 
-<!-- TODO: replace the four files under docs/screenshots/ with real captures -->
-<img src="docs/screenshots/menubar.png" width="420" alt="MemoryBar in the macOS menu bar showing available memory in gigabytes">
+<img src="docs/screenshots/menubar.png" width="420" alt="A strip of the macOS menu bar; MemoryBar shows 2.5G next to a memory-chip icon">
 
-*In the menu bar. The value follows the display mode you pick.*
+*In the menu bar — the memory-chip icon and `2.5G`. The value follows the display mode you pick.*
 
-| Panel | Details expanded | Floating window |
-| --- | --- | --- |
-| <img src="docs/screenshots/panel.png" width="260" alt="MemoryBar panel showing the large value, the composition bar, and total, used and available memory"> | <img src="docs/screenshots/panel-details.png" width="260" alt="MemoryBar panel with details expanded, showing the memory breakdown, swap and the apps using the most memory"> | <img src="docs/screenshots/floating.png" width="260" alt="MemoryBar floating window on the desktop"> |
-| Click the menu bar item. | The breakdown, swap and top apps. | Stays on screen across Spaces. |
+| Compact | Details expanded |
+| --- | --- |
+| <img src="docs/screenshots/floating.png" width="300" alt="MemoryBar showing 2.56 GB available, a colored composition bar, and rows for installed, used and available memory"> | <img src="docs/screenshots/floating-details.png" width="300" alt="MemoryBar with details expanded, showing the memory breakdown, swap used, usage ratio and the apps using the most memory"> |
+| The value you chose, the composition bar, and installed / used / available. The dot at the top right is memory pressure. | The breakdown behind the bar, swap, usage ratio, and the apps using the most memory. |
+
+Shown here as the floating window, which is why it has a close button. The menu bar panel renders the same view and adds a settings section and a quit button below it.
 
 ## Install
 

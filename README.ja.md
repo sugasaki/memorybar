@@ -22,15 +22,16 @@ macOSのメニューバーに常駐し、メモリの残容量・使用量をア
 
 ## スクリーンショット
 
-<!-- TODO: 実際のキャプチャに差し替える -->
-<img src="docs/screenshots/menubar.png" width="420" alt="メニューバーに残容量をGBで表示している MemoryBar">
+<img src="docs/screenshots/menubar.png" width="420" alt="macOS のメニューバー。メモリチップのアイコンの隣に MemoryBar が 2.5G と表示している">
 
-*メニューバーでの表示。数値は選んだモードに従う。*
+*メニューバーでの表示 — メモリチップのアイコンと `2.5G`。数値は選んだモードに従う。*
 
-| パネル | 詳細を開いた状態 | フローティングウィンドウ |
-| --- | --- | --- |
-| <img src="docs/screenshots/panel.png" width="260" alt="大きな数値・内訳の帯・搭載/使用済み/利用可能を表示した MemoryBar のパネル"> | <img src="docs/screenshots/panel-details.png" width="260" alt="詳細を開き、内訳・スワップ・使用量の多いアプリを表示した MemoryBar のパネル"> | <img src="docs/screenshots/floating.png" width="260" alt="デスクトップに常時表示した MemoryBar のフローティングウィンドウ"> |
-| メニューバーアイコンをクリックする。 | 「詳細」で内訳・スワップ・上位アプリが出る。 | 全スペースに追従して残る。 |
+| コンパクト表示 | 詳細を開いた状態 |
+| --- | --- |
+| <img src="docs/screenshots/floating.png" width="300" alt="利用可能なメモリ 2.56 GB、内訳の帯、搭載/使用済み/利用可能の行を表示した MemoryBar"> | <img src="docs/screenshots/floating-details.png" width="300" alt="詳細を開き、内訳・使用済みスワップ・使用率・使用量の多いアプリを表示した MemoryBar"> |
+| 選んだ値・内訳の帯・搭載/使用済み/利用可能。右上の点はメモリプレッシャー。 | 帯の内訳、スワップ、使用率、使用量の多いアプリ。 |
+
+ここではフローティングウィンドウを載せているため閉じるボタンが付いている。メニューバーのパネルも同じ表示で、下に設定と終了が加わる。
 
 ## インストール
 
