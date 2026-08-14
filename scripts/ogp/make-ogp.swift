@@ -14,6 +14,9 @@
 import AppKit
 import CoreGraphics
 import Foundation
+// CGImageSource / CGImageDestination の出所。AppKit 経由でも解決できるが、
+// 依存を暗黙にしない
+import ImageIO
 
 // MARK: - 配色(アイコン・構成比の帯と揃える)
 
