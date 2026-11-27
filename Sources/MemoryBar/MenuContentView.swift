@@ -7,6 +7,8 @@ struct MenuContentView: View {
     let updateController: UpdateController
     let loginItemController: LoginItemController
     let floatingController: FloatingWindowController
+    /// Popover のサイズは、その所有者を通じて変更する。
+    var onHeightChange: ((CGFloat) -> Void)? = nil
     @State private var floatingVisible = false
     @AppStorage(MenuContentView.detailsExpandedKey) private var detailsExpanded = false
     @AppStorage(MenuContentView.settingsExpandedKey) private var settingsExpanded = false
@@ -67,6 +69,7 @@ struct MenuContentView: View {
             .background(
                 WindowHeightSync(
                     contentHeight: resolvedHeight,
+                    onHeightChange: onHeightChange,
                     onBudgetChange: { budget in
                         if heightBudget != budget { heightBudget = budget }
                     }))
@@ -335,6 +338,7 @@ final class HeightGovernor {
 struct WindowHeightSync: NSViewRepresentable {
     /// 反映したい高さ(内容座標系。画面の上限で丸めた後の値)。実測前は nil
     let contentHeight: CGFloat?
+    var onHeightChange: ((CGFloat) -> Void)? = nil
     /// パネルに使える高さ(内容座標系)が分かる・変わるたびに呼ばれる
     let onBudgetChange: (CGFloat) -> Void
 
@@ -361,6 +365,7 @@ struct WindowHeightSync: NSViewRepresentable {
 
     func updateNSView(_ view: ScreenAwareView, context: Context) {
         view.contentHeight = contentHeight
+        view.onHeightChange = onHeightChange
         view.onBudgetChange = onBudgetChange
         // 更新の途中ではウィンドウの大きさがまだ変わっていないため、
         // レイアウトが落ち着く次のループで見る
@@ -378,6 +383,7 @@ struct WindowHeightSync: NSViewRepresentable {
     /// ウィンドウを持つ側の実務。画面構成の変更もここで受ける
     final class ScreenAwareView: NSView {
         var contentHeight: CGFloat?
+        var onHeightChange: ((CGFloat) -> Void)?
         var onBudgetChange: ((CGFloat) -> Void)?
         let governor = HeightGovernor()
         private var screenObservation: ObservationHolder?
@@ -404,13 +410,25 @@ struct WindowHeightSync: NSViewRepresentable {
             if let visible {
                 // パネルに使える内容の高さ。タイトルバー等の分を除いて伝える。
                 // 画面遷移中の壊れた値(下限未満)で根を潰さないよう、伝えない
-                let budget = window.contentRect(
-                    forFrameRect: NSRect(
-                        x: 0, y: 0, width: window.frame.width, height: visible.height)
-                ).height
+                let budget: CGFloat
+                if onHeightChange != nil {
+                    // Popover の矢印・余白も画面内に収める。背景ビューの高さが
+                    // SwiftUI の内容高なので、実際のウィンドウとの差が装飾の分になる。
+                    let chromeHeight = max(0, window.frame.height - bounds.height)
+                    budget = visible.height - chromeHeight
+                } else {
+                    budget = window.contentRect(
+                        forFrameRect: NSRect(
+                            x: 0, y: 0, width: window.frame.width, height: visible.height)
+                    ).height
+                }
                 if budget >= WindowHeightSync.minimumHeight { onBudgetChange?(budget) }
             }
             guard let contentHeight else { return }
+            if let onHeightChange {
+                onHeightChange(contentHeight)
+                return
+            }
             // 測っているのは内容の高さ。タイトルバー等がある窓でもずれないよう、
             // フレーム基準へ変換してから比べる
             let target = window.frameRect(
