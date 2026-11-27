@@ -16,7 +16,7 @@ MemoryBar — macOS のメニューバーに常駐し、メモリの残量・使
 - クリックで詳細（アプリ/確保済み/圧縮/キャッシュ/スワップ/メモリプレッシャー）を表示
 
 ## Tech Stack
-- Swift 6 + SwiftUI（`MenuBarExtra` によるメニューバー常駐）
+- Swift 6 + AppKit（`NSStatusItem`・`NSPopover`）+ SwiftUI（詳細・フローティング表示）
 - Swift Package Manager（Xcode プロジェクトファイルは使わない）
 - 外部依存なし（標準フレームワーク + Mach / sysctl API のみ）
 - 対応 OS: macOS 14 以降
@@ -32,7 +32,8 @@ scripts/make-app.sh    # ローカル利用向け .app バンドルを dist/ に
 ## ファイル構成
 - `Package.swift` — SPM マニフェスト
 - `Sources/MemoryBar/`
-  - `App.swift` — エントリポイント（`MenuBarExtra`・アクセサリ化）
+  - `App.swift` — エントリポイント・メモリ監視・アクセサリ化
+  - `StatusBarController.swift` — ネイティブの数値表示と詳細パネルの開閉
   - `MemorySampler.swift` — Mach / sysctl からの計測（副作用はここに隔離）
   - `MemorySnapshot.swift` — 計測値から使用量・残量を導出する純粋ロジック
   - `DisplayMode.swift` — メニューバー表示モードとフォーマット

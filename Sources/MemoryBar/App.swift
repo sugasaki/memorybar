@@ -1,6 +1,6 @@
 import AppKit
 import Dispatch
-import SwiftUI
+import Observation
 
 /// Swift 6.1では@MainActorクラスのdeinitが非分離のため、
 /// ライフサイクル資源を非Actorの専用ホルダーへまとめて確実に停止する。
@@ -46,7 +46,11 @@ enum Main {
             installUpdateFromCLI()
             return
         }
-        MemoryBarApp.main()
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        withExtendedLifetime(delegate) { app.run() }
     }
 
     private static func installUpdateFromCLI() {
@@ -256,56 +260,27 @@ final class MemoryMonitor {
     }
 }
 
-struct MemoryBarApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var monitor: MemoryMonitor
-    @State private var updateController = UpdateController.shared
-    @State private var loginItemController = LoginItemController.shared
-    @State private var floatingController: FloatingWindowController
-    @AppStorage(DisplayMode.defaultsKey) private var displayModeRaw = DisplayMode.default.rawValue
-
-    init() {
-        let monitor = MemoryMonitor()
-        let floating = FloatingWindowController(monitor: monitor)
-        _monitor = State(initialValue: monitor)
-        _floatingController = State(initialValue: floating)
-        // ウィンドウの生成は起動完了後に回す(init 中に前面化しても反映されない)
-        Task { @MainActor in floating.restore() }
-    }
-
-    private var displayMode: DisplayMode {
-        DisplayMode(rawValue: displayModeRaw) ?? .default
-    }
-
-    var body: some Scene {
-        MenuBarExtra {
-            MenuContentView(
-                monitor: monitor, updateController: updateController,
-                loginItemController: loginItemController,
-                floatingController: floatingController)
-        } label: {
-            // Label(_:systemImage:) を渡すと SwiftUI はアイコンだけを
-            // NSStatusItem に設定し、数値が描画されない(Issue #25)。
-            // 常時表示が本アプリの中心機能なので、テキストで描画する
-            HStack(spacing: 3) {
-                Image(systemName: "memorychip")
-                // 表示文字列そのものを読むことで、値が動いても文字列が同じティックでは
-                // 再描画が走らない(1秒更新では約半分がこれに当たる)
-                Text(monitor.menuBarText)
-                    // 桁が変わったときに他のメニューバー項目がずれないようにする
-                    .monospacedDigit()
-            }
-        }
-        .menuBarExtraStyle(.window)
-    }
-}
-
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var statusBarController: StatusBarController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // swift runなど.appバンドル外から起動してもDockに出さない
         NSApp.setActivationPolicy(.accessory)
-        // メニューのコンテンツは初回クリックまで生成されないため、
-        // 起動時の処理はビューの task ではなくここで行う
+        // SwiftUI App が用意していた終了ショートカットを引き継ぐ。
+        let menu = NSMenu()
+        let applicationItem = NSMenuItem()
+        let applicationMenu = NSMenu()
+        applicationMenu.addItem(
+            withTitle: "MemoryBar を終了", action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q")
+        applicationItem.submenu = applicationMenu
+        menu.addItem(applicationItem)
+        NSApp.mainMenu = menu
+
+        let monitor = MemoryMonitor()
+        let floating = FloatingWindowController(monitor: monitor)
+        statusBarController = StatusBarController(monitor: monitor, floatingController: floating)
+        floating.restore()
         LoginItemController.shared.enableByDefaultIfNeeded()
         UpdateController.shared.checkAtLaunchIfEnabled()
     }
