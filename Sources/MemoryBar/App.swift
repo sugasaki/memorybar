@@ -266,6 +266,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // swift runなど.appバンドル外から起動してもDockに出さない
         NSApp.setActivationPolicy(.accessory)
+        // SwiftUI App が用意していた終了ショートカットを引き継ぐ。
+        let menu = NSMenu()
+        let applicationItem = NSMenuItem()
+        let applicationMenu = NSMenu()
+        applicationMenu.addItem(
+            withTitle: "MemoryBar を終了", action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q")
+        applicationItem.submenu = applicationMenu
+        menu.addItem(applicationItem)
+        NSApp.mainMenu = menu
+
         let monitor = MemoryMonitor()
         let floating = FloatingWindowController(monitor: monitor)
         statusBarController = StatusBarController(monitor: monitor, floatingController: floating)
